@@ -914,13 +914,18 @@ function syncSelectedExperience(value) {
 async function init() {
   await refreshAll(false);
 
-  // Suggestion chips — clicking fills the input and focuses it
+  // Suggestion chips — clicking fills the input, closes the panel,
+  // then pulses the Submit button to make it obvious what to do next
+  const submitBtn = els.wordForm.querySelector("button[type='submit']");
   document.querySelectorAll(".suggestion-chip").forEach(chip => {
     chip.addEventListener("click", () => {
       els.wordInput.value = chip.textContent.trim();
-      els.wordInput.focus();
-      // Close the details element after picking
       chip.closest("details").removeAttribute("open");
+      // Scroll the submit button into view and pulse it
+      submitBtn.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      submitBtn.classList.remove("pulse-attention"); // reset if already animating
+      void submitBtn.offsetWidth;                    // force reflow to restart animation
+      submitBtn.classList.add("pulse-attention");
     });
   });
 
