@@ -242,16 +242,31 @@ async function loadWords() {
 }
 
 // ─── Word cloud rendering ────────────────────────────────────────────────────
-// Uses a canvas-based size measurement + spiral placement so word positions
-// are always in the same pixel space as the SVG — no scaling involved.
+// Three modes:
+//   "acoustic" — colourful, category-styled, subtle rotations (default)
+//   "mono"     — clean black & white, single font, no rotation
+//   "fun"      — wild colours, mixed fonts, steep tilts, big size swings
+
+let cloudMode = "acoustic"; // persists across redraws
+
+// ── Palettes ──────────────────────────────────────────────────────────────────
 
 const PALETTES = {
-  echo:    ["#5b6ee1", "#7c72ff", "#b05fd3", "#2e86ab"],
-  harsh:   ["#c44536", "#d66a2f", "#6c5b7b", "#4a4e69"],
-  deep:    ["#264653", "#355070", "#3d405b", "#2b2d42"],
-  bright:  ["#0a9396", "#3a86ff", "#e07a00", "#8ecae6"],
-  neutral: ["#355070", "#6d597a", "#2a9d8f", "#bc6c25", "#8d99ae"],
+  acoustic: {
+    echo:    ["#5b6ee1", "#7c72ff", "#b05fd3", "#2e86ab"],
+    harsh:   ["#c44536", "#d66a2f", "#6c5b7b", "#4a4e69"],
+    deep:    ["#264653", "#355070", "#3d405b", "#2b2d42"],
+    bright:  ["#0a9396", "#3a86ff", "#e07a00", "#8ecae6"],
+    neutral: ["#355070", "#6d597a", "#2a9d8f", "#bc6c25", "#8d99ae"],
+  },
+  fun: [
+    "#e63946","#f4a261","#2a9d8f","#e9c46a","#264653",
+    "#7209b7","#3a86ff","#fb5607","#06d6a0","#ef233c",
+    "#118ab2","#ffd166","#9b2226","#52b788","#c77dff",
+  ],
 };
+
+// ── Word classification (acoustic mode only) ──────────────────────────────────
 
 function classifyWord(text) {
   const t = text.toLowerCase();
@@ -262,16 +277,51 @@ function classifyWord(text) {
   return "neutral";
 }
 
-function fontForCategory(category, isPhrase) {
+// ── Font selection ─────────────────────────────────────────────────────────────
+
+const FUN_FONTS = [
+  "800 {S}px 'Arial Black',Arial,sans-serif",
+  "700 italic {S}px Georgia,serif",
+  "700 {S}px Impact,sans-serif",
+  "600 {S}px 'Trebuchet MS',sans-serif",
+  "700 {S}px 'Courier New',monospace",
+  "900 {S}px Arial,sans-serif",
+];
+
+function fontForWord(mode, category, isPhrase, index) {
+  if (mode === "mono")     return "600 {S}px Arial,Helvetica,sans-serif";
+  if (mode === "fun")      return FUN_FONTS[index % FUN_FONTS.length];
+  // acoustic
   if (category === "echo")  return "italic 600 {S}px Georgia,serif";
   if (category === "harsh") return "700 {S}px 'Courier New',monospace";
   if (isPhrase)             return "600 {S}px 'Trebuchet MS',Arial,sans-serif";
   return "800 {S}px 'Arial Black',Arial,sans-serif";
 }
 
-// Measure a word's pixel dimensions using an off-screen canvas.
-// This is the only reliable way to know exactly how much space a word needs
-// before we commit to placing it in the SVG.
+// ── Rotation angles ────────────────────────────────────────────────────────────
+// Phrases are never rotated (they're too wide to tilt readably).
+// Rotation is expressed in degrees and used both for SVG transform and for
+// swapping the bounding-box dimensions in the collision checker.
+
+function rotationForWord(mode, category, isPhrase, index) {
+  if (isPhrase) return 0;
+  if (mode === "mono") return 0;
+  if (mode === "fun") {
+    // Cycle through a lively set of angles — every word has a chance to tilt
+    const angles = [0, 0, 90, -90, 45, -45, 0, 90, -45, 0, 45, -90];
+    return angles[index % angles.length];
+  }
+  // acoustic: only single short words tilt; harsh words favour 90°
+  const angles = [0, 0, 0, 90, 0, -90, 0, 0, 45, 0];
+  if (category === "harsh") {
+    const harshAngles = [0, 90, 0, -90, 0, 90];
+    return harshAngles[index % harshAngles.length];
+  }
+  return angles[index % angles.length];
+}
+
+// ── Canvas measurement ─────────────────────────────────────────────────────────
+
 const _measureCanvas = document.createElement("canvas");
 const _measureCtx    = _measureCanvas.getContext("2d");
 
@@ -280,16 +330,30 @@ function measureWord(text, fontTemplate, size) {
   _measureCtx.font = font;
   const m = _measureCtx.measureText(text);
   const w = Math.ceil(m.width) + 4;
-  const h = Math.ceil(size * 1.25) + 4;
+  const h = Math.ceil(size * 1.3) + 4;
   return { w, h };
 }
 
-// Archimedean spiral outward from the centre.
+// When a word is rotated, its effective bounding box changes.
+// 90° / -90°: swap width and height.
+// 45° / -45°: use the diagonal (worst case).
+// 0°: unchanged.
+function rotatedBounds(w, h, angleDeg) {
+  const a = Math.abs(angleDeg % 180);
+  if (a === 90)  return { w: h, h: w };
+  if (a === 45) {
+    const d = Math.ceil(Math.sqrt(w * w + h * h));
+    return { w: d, h: d };
+  }
+  return { w, h };
+}
+
+// ── Spiral placement ───────────────────────────────────────────────────────────
+
 function* spiral(cx, cy) {
-  const step = 0.15;
   let angle = 0;
   while (true) {
-    const r = step * angle;
+    const r = 0.15 * angle;
     yield { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
     angle += 0.18;
   }
@@ -308,18 +372,18 @@ function placeWords(stageWidth, stageHeight, wordData) {
   const placed = [];
 
   for (const word of wordData) {
-    const { w, h } = measureWord(word.text, word.fontTemplate, word.size);
+    const { w: rawW, h: rawH } = measureWord(word.text, word.fontTemplate, word.size);
+    const { w, h } = rotatedBounds(rawW, rawH, word.rotate);
     word.w = w;
     word.h = h;
 
     let found = false;
     for (const { x, y } of spiral(cx, cy)) {
-      // Keep fully inside bounds with a small margin
       if (x - w / 2 < 4 || x + w / 2 > stageWidth  - 4) continue;
       if (y - h / 2 < 4 || y + h / 2 > stageHeight - 4) continue;
 
       const candidate = { x, y, w, h };
-      const collision = placed.some(p => rectsOverlap(candidate, { x: p.x, y: p.y, w: p.w + 8, h: p.h + 6 }));
+      const collision = placed.some(p => rectsOverlap(candidate, { x: p.x, y: p.y, w: p.w + 10, h: p.h + 8 }));
       if (!collision) {
         word.x = x;
         word.y = y;
@@ -329,50 +393,75 @@ function placeWords(stageWidth, stageHeight, wordData) {
       }
     }
 
-    // Safety: spiral iterated too long without finding a slot — skip this word
-    if (!found) {
-      console.warn("Could not place:", word.text);
-    }
+    if (!found) console.warn("Could not place:", word.text);
   }
 
   return placed;
 }
+
+// ── Build word data ────────────────────────────────────────────────────────────
 
 function buildWordData(stageWidth, stageHeight) {
   const maxCount = Math.max(...currentWordCounts.map(([, v]) => v));
   const minCount = Math.min(...currentWordCounts.map(([, v]) => v));
   const countRange = maxCount - minCount || 1;
 
-  // Font size: sqrt-scaled between minPx and maxPx
-  // Cap maxPx so the largest word can't take more than ~30% of stage width
-  const maxPx = Math.min(72, Math.floor(stageWidth * 0.28));
-  const minPx = Math.max(14, Math.floor(maxPx * 0.22));
+  // Size range varies by mode
+  const maxPx = Math.min(
+    cloudMode === "fun" ? 80 : 72,
+    Math.floor(stageWidth * (cloudMode === "fun" ? 0.30 : 0.26))
+  );
+  const minPx = Math.max(
+    cloudMode === "fun" ? 13 : 14,
+    Math.floor(maxPx * (cloudMode === "fun" ? 0.18 : 0.22))
+  );
 
   return currentWordCounts.map(([text, value], i) => {
-    const category    = classifyWord(text);
-    const isPhrase    = text.includes(" ");
-    const palette     = PALETTES[category];
-    const fontTemplate = fontForCategory(category, isPhrase);
-    const t           = (value - minCount) / countRange;          // 0–1
-    const size        = Math.round(minPx + Math.sqrt(t) * (maxPx - minPx));
-    const emphasis    = /really|very|extremely|super/i.test(text) ? 1.08 : 1.0;
+    const category     = classifyWord(text);
+    const isPhrase     = text.includes(" ");
+    const fontTemplate = fontForWord(cloudMode, category, isPhrase, i);
+    const rotate       = rotationForWord(cloudMode, category, isPhrase, i);
+    const t            = (value - minCount) / countRange;
+    const size         = Math.round(minPx + Math.sqrt(t) * (maxPx - minPx));
+    const emphasis     = /really|very|extremely|super/i.test(text) ? 1.08 : 1.0;
+
+    // Colour
+    let color;
+    if (cloudMode === "mono") {
+      // Greyscale: most-used words are darkest
+      const grey = Math.round(20 + (1 - t) * 160);
+      color = `rgb(${grey},${grey},${grey})`;
+    } else if (cloudMode === "fun") {
+      color = PALETTES.fun[i % PALETTES.fun.length];
+    } else {
+      const palette = PALETTES.acoustic[category];
+      color = palette[i % palette.length];
+    }
+
+    // Decorative properties (acoustic & fun only)
+    const letterSpacing = (cloudMode !== "mono" && category === "echo") ? "0.03em"
+                        : (cloudMode !== "mono" && category === "harsh") ? "0.01em" : "0";
+    const stroke      = cloudMode === "mono" ? "none"
+                      : cloudMode === "fun"  ? "none"
+                      : category === "bright" ? "rgba(255,255,255,.52)"
+                      : category === "harsh"  ? "rgba(24,24,24,.18)" : "none";
+    const strokeWidth = category === "bright" ? 1 : 0.6;
+    const shadowColor = category === "echo"  ? "rgba(124,114,255,.24)"
+                      : category === "deep"  ? "rgba(22,35,48,.2)"
+                      : "rgba(58,134,255,.12)";
+    const glow        = cloudMode !== "mono" && (category === "echo" || category === "bright");
+    const trail       = cloudMode !== "mono" && (category === "echo" || category === "deep");
 
     return {
-      text,
-      value,
-      category,
-      fontTemplate,
+      text, value, category, fontTemplate,
       size: Math.round(size * emphasis),
-      color: palette[i % palette.length],
-      letterSpacing: category === "echo" ? "0.03em" : category === "harsh" ? "0.01em" : "0",
-      stroke: category === "bright" ? "rgba(255,255,255,.52)" : category === "harsh" ? "rgba(24,24,24,.18)" : "none",
-      strokeWidth: category === "bright" ? 1 : 0.6,
-      shadowColor: category === "echo" ? "rgba(124,114,255,.24)"
-                 : category === "deep"  ? "rgba(22,35,48,.2)"
-                 : "rgba(58,134,255,.12)",
+      rotate, color, letterSpacing,
+      stroke, strokeWidth, shadowColor, glow, trail,
     };
   });
 }
+
+// ── SVG render ─────────────────────────────────────────────────────────────────
 
 function renderSvg(placed, stageWidth, stageHeight) {
   const NS = "http://www.w3.org/2000/svg";
@@ -382,12 +471,14 @@ function renderSvg(placed, stageWidth, stageHeight) {
   svg.setAttribute("height", stageHeight);
   svg.setAttribute("aria-label", "Word cloud");
 
-  // SVG filter: subtle glow for echo + bright words
+  // Glow filter (used by echo + bright in acoustic/fun modes)
   const defs   = document.createElementNS(NS, "defs");
   const filter = document.createElementNS(NS, "filter");
   filter.setAttribute("id", "softGlow");
+  filter.setAttribute("x", "-20%"); filter.setAttribute("y", "-20%");
+  filter.setAttribute("width", "140%"); filter.setAttribute("height", "140%");
   const blur = document.createElementNS(NS, "feGaussianBlur");
-  blur.setAttribute("stdDeviation", "1.2");
+  blur.setAttribute("stdDeviation", "1.4");
   blur.setAttribute("result", "blur");
   const merge = document.createElementNS(NS, "feMerge");
   ["blur", "SourceGraphic"].forEach(inp => {
@@ -401,9 +492,11 @@ function renderSvg(placed, stageWidth, stageHeight) {
   svg.appendChild(defs);
 
   for (const w of placed) {
-    const fontStr = w.fontTemplate.replace("{S}", w.size);
-    // Echo / deep: faint trail clone behind the word
-    if (w.category === "echo" || w.category === "deep") {
+    const fontStr  = w.fontTemplate.replace("{S}", w.size);
+    const transform = w.rotate ? `rotate(${w.rotate})` : "";
+
+    // Faint trail behind echo / deep words
+    if (w.trail) {
       const trail = document.createElementNS(NS, "text");
       const dy = w.category === "echo" ? 3 : 5;
       const dx = w.category === "echo" ? 4 : 0;
@@ -411,6 +504,7 @@ function renderSvg(placed, stageWidth, stageHeight) {
       trail.setAttribute("y", w.y + dy);
       trail.setAttribute("text-anchor", "middle");
       trail.setAttribute("dominant-baseline", "middle");
+      if (transform) trail.setAttribute("transform", `translate(${w.x + dx},${w.y + dy}) ${transform} translate(${-(w.x + dx)},${-(w.y + dy)})`);
       trail.style.cssText = `font:${fontStr};fill:${w.shadowColor};opacity:0.18;pointer-events:none;`;
       trail.textContent = w.text;
       svg.appendChild(trail);
@@ -421,10 +515,11 @@ function renderSvg(placed, stageWidth, stageHeight) {
     el.setAttribute("y", w.y);
     el.setAttribute("text-anchor", "middle");
     el.setAttribute("dominant-baseline", "middle");
+    if (transform) el.setAttribute("transform", `translate(${w.x},${w.y}) ${transform} translate(${-w.x},${-w.y})`);
 
     let css = `font:${fontStr};fill:${w.color};letter-spacing:${w.letterSpacing};`;
     if (w.stroke !== "none") css += `stroke:${w.stroke};stroke-width:${w.strokeWidth}px;paint-order:stroke fill;`;
-    if (w.category === "echo" || w.category === "bright") css += "filter:url(#softGlow);";
+    if (w.glow) css += "filter:url(#softGlow);";
     el.style.cssText = css;
     el.setAttribute("class", `word word--${w.category}`);
     el.textContent = w.text;
@@ -433,6 +528,8 @@ function renderSvg(placed, stageWidth, stageHeight) {
 
   return svg;
 }
+
+// ── Draw ───────────────────────────────────────────────────────────────────────
 
 async function drawCloud() {
   if (!currentWordCounts.length) {
@@ -443,7 +540,6 @@ async function drawCloud() {
   }
 
   els.cloudMessage.textContent = "";
-  // Build off-screen, then swap in — prevents the visible blink from innerHTML clear
   const stageWidth  = els.cloudStage.clientWidth  || 960;
   const stageHeight = els.cloudStage.clientHeight || 490;
 
@@ -453,7 +549,6 @@ async function drawCloud() {
 
   const svg = renderSvg(placed, stageWidth, stageHeight);
 
-  // Swap: remove old SVG (if any) then insert new one atomically
   const existing = els.cloudStage.querySelector("svg");
   if (existing) existing.remove();
   els.cloudStage.appendChild(svg);
@@ -748,6 +843,13 @@ async function init() {
   els.hideBtn.addEventListener("click", hideCloud);
   els.downloadJpegBtn.addEventListener("click", downloadCloudAsJpeg);
   els.refreshBtn.addEventListener("click", () => refreshAll(!els.cloudWrap.classList.contains("is-hidden")));
+  document.querySelectorAll(".cloud-mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      cloudMode = btn.dataset.mode;
+      document.querySelectorAll(".cloud-mode-btn").forEach(b => b.classList.toggle("is-active", b === btn));
+      if (!els.cloudWrap.classList.contains("is-hidden")) drawCloud();
+    });
+  });
   window.addEventListener("resize", () => {
     if (!els.cloudWrap.classList.contains("is-hidden")) {
       drawCloud();

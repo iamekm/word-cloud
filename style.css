@@ -118,3 +118,26 @@ button:hover { transform:translateY(-1px); }
   text-rendering: geometricPrecision;
 }
 
+
+/* ── Cloud mode toggle ────────────────────────────────────────────────────── */
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cloud-mode-btn {
+  background: #ebe8e2;
+  color: var(--ink);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: .9rem;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .12s;
+}
+.cloud-mode-btn:hover { transform: translateY(-1px); background: #dedad2; }
+.cloud-mode-btn.is-active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
