@@ -26,6 +26,7 @@ button:hover { transform:translateY(-1px); }
 .ghost-btn { background:#ebe8e2; color:var(--ink); }
 .danger-btn { background:var(--danger); color:white; }
 .button-row { display:flex; gap:10px; flex-wrap:wrap; }
+.top-gap { margin-top:12px; }
 .stat { padding:12px 14px; border-radius:14px; background:#faf8f4; border:1px solid var(--line); }
 .stat-label { display:block; font-size:.85rem; color:var(--muted); margin-bottom:4px; }
 .muted { color:var(--muted); }
