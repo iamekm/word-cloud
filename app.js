@@ -914,6 +914,16 @@ function syncSelectedExperience(value) {
 async function init() {
   await refreshAll(false);
 
+  // Suggestion chips — clicking fills the input and focuses it
+  document.querySelectorAll(".suggestion-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      els.wordInput.value = chip.textContent.trim();
+      els.wordInput.focus();
+      // Close the details element after picking
+      chip.closest("details").removeAttribute("open");
+    });
+  });
+
   els.experienceSelect.addEventListener("change", event => syncSelectedExperience(event.target.value));
   els.adminExperienceSelect.addEventListener("change", event => syncSelectedExperience(event.target.value));
   els.wordForm.addEventListener("submit", submitWord);

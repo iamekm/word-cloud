@@ -141,3 +141,71 @@ button:hover { transform:translateY(-1px); }
   color: #fff;
   border-color: var(--ink);
 }
+
+/* ── Suggestion chips ─────────────────────────────────────────────────────── */
+.suggestions-block {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #faf8f4;
+  overflow: hidden;
+}
+.suggestions-block summary {
+  padding: 11px 16px;
+  font-size: .9rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.suggestions-block summary::-webkit-details-marker { display: none; }
+.suggestions-block summary::before {
+  content: "▸";
+  font-size: .75rem;
+  transition: transform .18s ease;
+  color: var(--muted);
+}
+.suggestions-block[open] summary::before { transform: rotate(90deg); }
+.suggestions-block summary:hover { color: var(--ink); }
+
+.suggestions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 4px 14px 14px;
+  align-items: center;
+}
+.suggest-group-label {
+  width: 100%;
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+.suggest-group-label:first-child { margin-top: 2px; }
+
+.suggestion-chip {
+  background: white;
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: .88rem;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, transform .1s;
+  font-weight: 500;
+}
+.suggestion-chip:hover {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
+  transform: translateY(-1px);
+}
+.suggestion-chip:active { transform: translateY(0); }

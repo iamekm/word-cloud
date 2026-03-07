@@ -32,12 +32,74 @@
 
       <section class="card">
         <h2>2. Add a word or phrase</h2>
-        <p class="muted">Short phrases are allowed, for example <em>really great</em>.</p>
+        <p class="muted">Short phrases are allowed, for example <em>really resonant</em>. Or pick a suggestion below.</p>
         <form id="wordForm" class="stack">
           <label for="wordInput">Word or phrase</label>
           <input id="wordInput" name="word" type="text" maxlength="80" placeholder="e.g. really resonant" autocomplete="off" required />
           <button class="primary-btn" type="submit">Submit response</button>
         </form>
+        <details class="suggestions-block">
+          <summary>Need inspiration? Browse suggestions</summary>
+          <div class="suggestions-grid">
+            <span class="suggest-group-label">Size &amp; space</span>
+            <button class="suggestion-chip" type="button">Vast</button>
+            <button class="suggestion-chip" type="button">Intimate</button>
+            <button class="suggestion-chip" type="button">Cavernous</button>
+            <button class="suggestion-chip" type="button">Enclosed</button>
+            <button class="suggestion-chip" type="button">Open</button>
+            <button class="suggestion-chip" type="button">Expansive</button>
+            <button class="suggestion-chip" type="button">Cramped</button>
+            <button class="suggestion-chip" type="button">Boundless</button>
+
+            <span class="suggest-group-label">Reverb &amp; echo</span>
+            <button class="suggestion-chip" type="button">Reverberant</button>
+            <button class="suggestion-chip" type="button">Dry</button>
+            <button class="suggestion-chip" type="button">Echoey</button>
+            <button class="suggestion-chip" type="button">Dead</button>
+            <button class="suggestion-chip" type="button">Live</button>
+            <button class="suggestion-chip" type="button">Long tail</button>
+            <button class="suggestion-chip" type="button">Short decay</button>
+            <button class="suggestion-chip" type="button">Diffuse</button>
+
+            <span class="suggest-group-label">Texture &amp; tone</span>
+            <button class="suggestion-chip" type="button">Warm</button>
+            <button class="suggestion-chip" type="button">Cold</button>
+            <button class="suggestion-chip" type="button">Bright</button>
+            <button class="suggestion-chip" type="button">Dark</button>
+            <button class="suggestion-chip" type="button">Muddy</button>
+            <button class="suggestion-chip" type="button">Clear</button>
+            <button class="suggestion-chip" type="button">Crisp</button>
+            <button class="suggestion-chip" type="button">Muffled</button>
+            <button class="suggestion-chip" type="button">Resonant</button>
+            <button class="suggestion-chip" type="button">Thin</button>
+            <button class="suggestion-chip" type="button">Rich</button>
+            <button class="suggestion-chip" type="button">Hollow</button>
+
+            <span class="suggest-group-label">Character</span>
+            <button class="suggestion-chip" type="button">Lush</button>
+            <button class="suggestion-chip" type="button">Harsh</button>
+            <button class="suggestion-chip" type="button">Smooth</button>
+            <button class="suggestion-chip" type="button">Grainy</button>
+            <button class="suggestion-chip" type="button">Shimmery</button>
+            <button class="suggestion-chip" type="button">Boomy</button>
+            <button class="suggestion-chip" type="button">Punchy</button>
+            <button class="suggestion-chip" type="button">Silky</button>
+            <button class="suggestion-chip" type="button">Metallic</button>
+            <button class="suggestion-chip" type="button">Earthy</button>
+
+            <span class="suggest-group-label">Feeling</span>
+            <button class="suggestion-chip" type="button">Immersive</button>
+            <button class="suggestion-chip" type="button">Distant</button>
+            <button class="suggestion-chip" type="button">Present</button>
+            <button class="suggestion-chip" type="button">Enveloping</button>
+            <button class="suggestion-chip" type="button">Unsettling</button>
+            <button class="suggestion-chip" type="button">Soothing</button>
+            <button class="suggestion-chip" type="button">Energetic</button>
+            <button class="suggestion-chip" type="button">Meditative</button>
+            <button class="suggestion-chip" type="button">Haunting</button>
+            <button class="suggestion-chip" type="button">Grounding</button>
+          </div>
+        </details>
         <p class="privacy-note">Please do not submit personal information. Responses may be visible to other participants and are stored publicly for this session.</p>
         <p class="privacy-note">If you would like a response you submitted to be permanently deleted, please contact the workshop leader (admin).</p>
         <p id="submitMessage" class="message" aria-live="polite"></p>
