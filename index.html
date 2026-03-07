@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Acoustic Word Cloud</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.3/src/wordcloud2.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Shared listening tool</p>
+        <h1>Acoustic Word Cloud</h1>
+        <p class="lede">Participants can each submit a single word from any device. When you reveal the cloud, the shared vocabulary appears live for the current experience.</p>
+      </div>
+      <button id="refreshBtn" class="ghost-btn" type="button">Refresh cloud</button>
+    </header>
+
+    <section class="grid">
+      <section class="card">
+        <h2>1. Add a word</h2>
+        <p class="muted">Enter one word only. This is saved to the current experience.</p>
+
+        <form id="wordForm" class="stack">
+          <label for="wordInput">Word</label>
+          <input id="wordInput" name="word" type="text" maxlength="40" placeholder="e.g. resonant" autocomplete="off" required />
+          <button class="primary-btn" type="submit">Submit word</button>
+        </form>
+
+        <p id="submitMessage" class="message" aria-live="polite"></p>
+      </section>
+
+      <section class="card">
+        <h2>2. Current experience</h2>
+        <div class="stack">
+          <div class="stat">
+            <span class="stat-label">Name</span>
+            <strong id="experienceName">Loading…</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Responses</span>
+            <strong id="responseCount">0</strong>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="card cloud-card">
+      <div class="cloud-header">
+        <div>
+          <h2>3. Reveal the cloud</h2>
+          <p class="muted">Click reveal when you want to display the group response.</p>
+        </div>
+        <div class="button-row">
+          <button id="revealBtn" class="primary-btn" type="button">Reveal word cloud</button>
+          <button id="hideBtn" class="ghost-btn" type="button">Hide cloud</button>
+        </div>
+      </div>
+      <div id="cloudWrap" class="cloud-wrap is-hidden">
+        <canvas id="wordCloudCanvas" width="1200" height="700"></canvas>
+      </div>
+      <p id="cloudMessage" class="message muted"></p>
+    </section>
+
+    <section class="card">
+      <div class="admin-header">
+        <div>
+          <h2>Admin controls</h2>
+          <p class="muted">Start a fresh experience or clear the current one.</p>
+        </div>
+        <button id="toggleAdminBtn" class="ghost-btn" type="button">Show admin</button>
+      </div>
+
+      <div id="adminPanel" class="admin-panel is-hidden">
+        <div class="stack">
+          <label for="adminPasscode">Admin passcode</label>
+          <input id="adminPasscode" type="password" placeholder="Enter passcode" />
+        </div>
+
+        <div class="admin-grid">
+          <form id="newExperienceForm" class="stack">
+            <label for="experienceInput">New experience name</label>
+            <input id="experienceInput" type="text" maxlength="100" placeholder="e.g. Chapel impulse response" />
+            <button class="primary-btn" type="submit">Start new experience</button>
+          </form>
+
+          <div class="stack">
+            <label>Clear responses</label>
+            <button id="clearCurrentBtn" class="danger-btn" type="button">Clear current experience</button>
+          </div>
+        </div>
+
+        <p id="adminMessage" class="message" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
