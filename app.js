@@ -312,8 +312,8 @@ function rotationForWord(mode, category, isPhrase, index) {
   if (isPhrase) return 0;
   if (mode === "mono") return 0;
   if (mode === "fun") {
-    // Every word gets a strong chance of tilting — upright is the exception
-    const angles = [90, -90, 45, -45, 90, 135, -135, 45, -90, 90, -45, 180, 45, -90, 90, -45];
+    // Mix of 0°, ±45°, ±90° — chaotic but all produce manageable bounding boxes
+    const angles = [90, -90, 45, -45, 90, 0, 45, -90, 0, 90, -45, 0, 45, -90, 90, -45, 0, 45];
     return angles[index % angles.length];
   }
   // default: only upright or 90° — clean, purposeful.
@@ -361,6 +361,12 @@ function* spiral(cx, cy) {
   }
 }
 
+// Max spiral steps before giving up on a word.
+// Fun mode needs more room to find slots for oddly-rotated large words.
+function maxSpiralSteps() {
+  return cloudMode === "fun" ? 18000 : 12000;
+}
+
 function rectsOverlap(a, b) {
   return !(a.x + a.w / 2 < b.x - b.w / 2 ||
            a.x - a.w / 2 > b.x + b.w / 2 ||
@@ -380,7 +386,10 @@ function placeWords(stageWidth, stageHeight, wordData) {
     word.h = h;
 
     let found = false;
+    let steps = 0;
+    const limit = maxSpiralSteps();
     for (const { x, y } of spiral(cx, cy)) {
+      if (++steps > limit) break;
       if (x - w / 2 < 4 || x + w / 2 > stageWidth  - 4) continue;
       if (y - h / 2 < 4 || y + h / 2 > stageHeight - 4) continue;
 
@@ -395,6 +404,7 @@ function placeWords(stageWidth, stageHeight, wordData) {
       }
     }
 
+    // If a word couldn't fit even after reducing size, skip it silently
     if (!found) console.warn("Could not place:", word.text);
   }
 
@@ -473,6 +483,7 @@ function buildWordData(stageWidth, stageHeight) {
       rotate, color, opacity, letterSpacing,
       stroke: "none", strokeWidth: 0,
       shadowColor, glow, trail,
+      animIndex: i,
     };
   });
 }
@@ -505,7 +516,56 @@ function renderSvg(placed, stageWidth, stageHeight) {
   filter.appendChild(blur);
   filter.appendChild(merge);
   defs.appendChild(filter);
+
+  // Per-word animations (fun mode only)
+  if (cloudMode === "fun") {
+    const style = document.createElementNS(NS, "style");
+    const FUN_ANIMATIONS = [
+      // wobble: gentle side-to-side rock
+      `@keyframes wc-wobble {
+        0%,100% { transform-origin: center; transform: rotate(var(--base-rot,0deg)) scale(1); }
+        25%      { transform: rotate(calc(var(--base-rot,0deg) + 6deg)) scale(1.04); }
+        75%      { transform: rotate(calc(var(--base-rot,0deg) - 6deg)) scale(0.97); }
+      }`,
+      // bounce: vertical pulse
+      `@keyframes wc-bounce {
+        0%,100% { transform: translateY(0) rotate(var(--base-rot,0deg)); }
+        40%      { transform: translateY(-7px) rotate(var(--base-rot,0deg)); }
+        60%      { transform: translateY(-4px) rotate(var(--base-rot,0deg)); }
+      }`,
+      // spin: slow full rotation
+      `@keyframes wc-spin {
+        0%   { transform: rotate(var(--base-rot,0deg)); }
+        100% { transform: rotate(calc(var(--base-rot,0deg) + 360deg)); }
+      }`,
+      // pulse: scale in and out
+      `@keyframes wc-pulse {
+        0%,100% { transform: rotate(var(--base-rot,0deg)) scale(1); }
+        50%      { transform: rotate(var(--base-rot,0deg)) scale(1.18); }
+      }`,
+      // jitter: rapid small shakes
+      `@keyframes wc-jitter {
+        0%,100% { transform: rotate(var(--base-rot,0deg)) translate(0,0); }
+        20%      { transform: rotate(calc(var(--base-rot,0deg)+3deg)) translate(-2px,1px); }
+        40%      { transform: rotate(calc(var(--base-rot,0deg)-2deg)) translate(2px,-1px); }
+        60%      { transform: rotate(calc(var(--base-rot,0deg)+1deg)) translate(-1px,2px); }
+        80%      { transform: rotate(calc(var(--base-rot,0deg)-3deg)) translate(1px,-2px); }
+      }`,
+      // float: slow drift up and down
+      `@keyframes wc-float {
+        0%,100% { transform: rotate(var(--base-rot,0deg)) translateY(0); }
+        50%      { transform: rotate(var(--base-rot,0deg)) translateY(-10px); }
+      }`,
+    ];
+    style.textContent = FUN_ANIMATIONS.join("
+");
+    defs.appendChild(style);
+  }
+
   svg.appendChild(defs);
+
+  const FUN_ANIM_NAMES = ["wc-wobble","wc-bounce","wc-spin","wc-pulse","wc-jitter","wc-float"];
+  const FUN_ANIM_DURATIONS = [2.8, 1.6, 8, 3.2, 0.5, 4.5];
 
   for (const w of placed) {
     const fontStr  = w.fontTemplate.replace("{S}", w.size);
@@ -537,6 +597,13 @@ function renderSvg(placed, stageWidth, stageHeight) {
     if (w.opacity !== undefined && w.opacity < 1) css += `opacity:${w.opacity};`;
     if (w.stroke !== "none") css += `stroke:${w.stroke};stroke-width:${w.strokeWidth}px;paint-order:stroke fill;`;
     if (w.glow) css += "filter:url(#softGlow);";
+    if (cloudMode === "fun") {
+      const animIdx  = w.animIndex % FUN_ANIM_NAMES.length;
+      const name     = FUN_ANIM_NAMES[animIdx];
+      const dur      = FUN_ANIM_DURATIONS[animIdx];
+      const delay    = (w.animIndex * 0.37) % 3;  // stagger so they don't all move together
+      css += `--base-rot:${w.rotate}deg;animation:${name} ${dur}s ${delay}s ease-in-out infinite;transform-box:fill-box;transform-origin:center;`;
+    }
     el.style.cssText = css;
     el.setAttribute("class", `word word--${w.category}`);
     el.textContent = w.text;
