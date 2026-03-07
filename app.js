@@ -241,147 +241,197 @@ async function loadWords() {
   return currentWordCounts;
 }
 
+// ─── Word cloud rendering ────────────────────────────────────────────────────
+// Uses a canvas-based size measurement + spiral placement so word positions
+// are always in the same pixel space as the SVG — no scaling involved.
+
+const PALETTES = {
+  echo:    ["#5b6ee1", "#7c72ff", "#b05fd3", "#2e86ab"],
+  harsh:   ["#c44536", "#d66a2f", "#6c5b7b", "#4a4e69"],
+  deep:    ["#264653", "#355070", "#3d405b", "#2b2d42"],
+  bright:  ["#0a9396", "#3a86ff", "#e07a00", "#8ecae6"],
+  neutral: ["#355070", "#6d597a", "#2a9d8f", "#bc6c25", "#8d99ae"],
+};
+
 function classifyWord(text) {
-  const lower = text.toLowerCase();
-  if (/(echo|reverb|reverber|resonan|ring|shimmer|halo|float|airy|lush|warm|soft|bloom|wash|tail)/.test(lower)) return "echo";
-  if (/(metal|sharp|harsh|crack|click|dry|glitch|buzz|noise|hard|abrasive|spiky|brittle)/.test(lower)) return "harsh";
-  if (/(deep|dark|bass|drone|dense|thick|heavy|rumble|grounded|boomy|sub|cavern)/.test(lower)) return "deep";
-  if (/(bright|spark|clear|light|open|crisp|clean|fresh|shiny|silvery|radiant)/.test(lower)) return "bright";
+  const t = text.toLowerCase();
+  if (/(echo|reverb|resonan|ring|shimmer|halo|float|airy|lush|warm|soft|bloom|wash|tail)/.test(t)) return "echo";
+  if (/(metal|sharp|harsh|crack|click|dry|glitch|buzz|noise|hard|abrasive|spiky|brittle)/.test(t)) return "harsh";
+  if (/(deep|dark|bass|drone|dense|thick|heavy|rumble|grounded|boomy|sub|cavern)/.test(t)) return "deep";
+  if (/(bright|spark|clear|light|open|crisp|clean|fresh|shiny|silvery|radiant)/.test(t)) return "bright";
   return "neutral";
 }
 
-function paletteForCategory(category) {
-  if (category === "echo") return ["#5b6ee1", "#7c72ff", "#b05fd3", "#2e86ab"];
-  if (category === "harsh") return ["#c44536", "#d66a2f", "#6c5b7b", "#4a4e69"];
-  if (category === "deep") return ["#264653", "#355070", "#3d405b", "#2b2d42"];
-  if (category === "bright") return ["#0a9396", "#3a86ff", "#ffb703", "#8ecae6"];
-  return ["#355070", "#6d597a", "#2a9d8f", "#bc6c25", "#8d99ae"];
+function fontForCategory(category, isPhrase) {
+  if (category === "echo")  return "italic 600 {S}px Georgia,serif";
+  if (category === "harsh") return "700 {S}px 'Courier New',monospace";
+  if (isPhrase)             return "600 {S}px 'Trebuchet MS',Arial,sans-serif";
+  return "800 {S}px 'Arial Black',Arial,sans-serif";
 }
 
-function fontForCategory(category, text) {
-  if (category === "echo") return "Georgia, Times New Roman, serif";
-  if (category === "harsh") return "Courier New, monospace";
-  if (text.includes(" ")) return "Trebuchet MS, Arial, sans-serif";
-  return "Arial Black, Arial, sans-serif";
+// Measure a word's pixel dimensions using an off-screen canvas.
+// This is the only reliable way to know exactly how much space a word needs
+// before we commit to placing it in the SVG.
+const _measureCanvas = document.createElement("canvas");
+const _measureCtx    = _measureCanvas.getContext("2d");
+
+function measureWord(text, fontTemplate, size) {
+  const font = fontTemplate.replace("{S}", size);
+  _measureCtx.font = font;
+  const m = _measureCtx.measureText(text);
+  const w = Math.ceil(m.width) + 4;
+  const h = Math.ceil(size * 1.25) + 4;
+  return { w, h };
 }
 
-function styleWordsForCloud() {
-  return currentWordCounts.map(([text, value], index) => {
-    const category = classifyWord(text);
-    const palette = paletteForCategory(category);
-    const font = fontForCategory(category, text);
-    const rotate = text.includes(" ") ? 0 : (category === "harsh" && index % 5 === 0 ? 90 : 0);
+// Archimedean spiral outward from the centre.
+function* spiral(cx, cy) {
+  const step = 0.15;
+  let angle = 0;
+  while (true) {
+    const r = step * angle;
+    yield { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+    angle += 0.18;
+  }
+}
+
+function rectsOverlap(a, b) {
+  return !(a.x + a.w / 2 < b.x - b.w / 2 ||
+           a.x - a.w / 2 > b.x + b.w / 2 ||
+           a.y + a.h / 2 < b.y - b.h / 2 ||
+           a.y - a.h / 2 > b.y + b.h / 2);
+}
+
+function placeWords(stageWidth, stageHeight, wordData) {
+  const cx = stageWidth  / 2;
+  const cy = stageHeight / 2;
+  const placed = [];
+
+  for (const word of wordData) {
+    const { w, h } = measureWord(word.text, word.fontTemplate, word.size);
+    word.w = w;
+    word.h = h;
+
+    let found = false;
+    for (const { x, y } of spiral(cx, cy)) {
+      // Keep fully inside bounds with a small margin
+      if (x - w / 2 < 4 || x + w / 2 > stageWidth  - 4) continue;
+      if (y - h / 2 < 4 || y + h / 2 > stageHeight - 4) continue;
+
+      const candidate = { x, y, w, h };
+      const collision = placed.some(p => rectsOverlap(candidate, { x: p.x, y: p.y, w: p.w + 8, h: p.h + 6 }));
+      if (!collision) {
+        word.x = x;
+        word.y = y;
+        placed.push(word);
+        found = true;
+        break;
+      }
+    }
+
+    // Safety: spiral iterated too long without finding a slot — skip this word
+    if (!found) {
+      console.warn("Could not place:", word.text);
+    }
+  }
+
+  return placed;
+}
+
+function buildWordData(stageWidth, stageHeight) {
+  const maxCount = Math.max(...currentWordCounts.map(([, v]) => v));
+  const minCount = Math.min(...currentWordCounts.map(([, v]) => v));
+  const countRange = maxCount - minCount || 1;
+
+  // Font size: sqrt-scaled between minPx and maxPx
+  // Cap maxPx so the largest word can't take more than ~30% of stage width
+  const maxPx = Math.min(72, Math.floor(stageWidth * 0.28));
+  const minPx = Math.max(14, Math.floor(maxPx * 0.22));
+
+  return currentWordCounts.map(([text, value], i) => {
+    const category    = classifyWord(text);
+    const isPhrase    = text.includes(" ");
+    const palette     = PALETTES[category];
+    const fontTemplate = fontForCategory(category, isPhrase);
+    const t           = (value - minCount) / countRange;          // 0–1
+    const size        = Math.round(minPx + Math.sqrt(t) * (maxPx - minPx));
+    const emphasis    = /really|very|extremely|super/i.test(text) ? 1.08 : 1.0;
 
     return {
       text,
       value,
-      font,
       category,
-      color: palette[index % palette.length],
-      rotate,
-      emphasis: /really|very|extremely|super/i.test(text) ? 1.08 : 1,
+      fontTemplate,
+      size: Math.round(size * emphasis),
+      color: palette[i % palette.length],
       letterSpacing: category === "echo" ? "0.03em" : category === "harsh" ? "0.01em" : "0",
       stroke: category === "bright" ? "rgba(255,255,255,.52)" : category === "harsh" ? "rgba(24,24,24,.18)" : "none",
       strokeWidth: category === "bright" ? 1 : 0.6,
-      shadowColor: category === "echo"
-        ? "rgba(124,114,255,.24)"
-        : category === "deep"
-        ? "rgba(22,35,48,.2)"
-        : category === "harsh"
-        ? "rgba(0,0,0,.08)"
-        : "rgba(58,134,255,.12)"
+      shadowColor: category === "echo" ? "rgba(124,114,255,.24)"
+                 : category === "deep"  ? "rgba(22,35,48,.2)"
+                 : "rgba(58,134,255,.12)",
     };
   });
 }
 
-function drawEchoTrails(selection) {
-  selection.filter(d => d.category === "echo").each(function(d) {
-    const node = d3.select(this);
-    for (let i = 1; i <= 2; i += 1) {
-      node.clone(true)
-        .lower()
-        .attr("transform", `translate(${d.x + i * 5},${d.y + i * 2}) rotate(${d.rotate})`)
-        .style("fill", d.shadowColor)
-        .style("opacity", 0.18 / i)
-        .style("filter", "blur(0.3px)");
+function renderSvg(placed, stageWidth, stageHeight) {
+  const NS = "http://www.w3.org/2000/svg";
+
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width",  stageWidth);
+  svg.setAttribute("height", stageHeight);
+  svg.setAttribute("aria-label", "Word cloud");
+
+  // SVG filter: subtle glow for echo + bright words
+  const defs   = document.createElementNS(NS, "defs");
+  const filter = document.createElementNS(NS, "filter");
+  filter.setAttribute("id", "softGlow");
+  const blur = document.createElementNS(NS, "feGaussianBlur");
+  blur.setAttribute("stdDeviation", "1.2");
+  blur.setAttribute("result", "blur");
+  const merge = document.createElementNS(NS, "feMerge");
+  ["blur", "SourceGraphic"].forEach(inp => {
+    const node = document.createElementNS(NS, "feMergeNode");
+    node.setAttribute("in", inp);
+    merge.appendChild(node);
+  });
+  filter.appendChild(blur);
+  filter.appendChild(merge);
+  defs.appendChild(filter);
+  svg.appendChild(defs);
+
+  for (const w of placed) {
+    const fontStr = w.fontTemplate.replace("{S}", w.size);
+    // Echo / deep: faint trail clone behind the word
+    if (w.category === "echo" || w.category === "deep") {
+      const trail = document.createElementNS(NS, "text");
+      const dy = w.category === "echo" ? 3 : 5;
+      const dx = w.category === "echo" ? 4 : 0;
+      trail.setAttribute("x", w.x + dx);
+      trail.setAttribute("y", w.y + dy);
+      trail.setAttribute("text-anchor", "middle");
+      trail.setAttribute("dominant-baseline", "middle");
+      trail.style.cssText = `font:${fontStr};fill:${w.shadowColor};opacity:0.18;pointer-events:none;`;
+      trail.textContent = w.text;
+      svg.appendChild(trail);
     }
-  });
 
-  selection.filter(d => d.category === "deep").each(function(d) {
-    d3.select(this).clone(true)
-      .lower()
-      .attr("transform", `translate(${d.x},${d.y + 5}) rotate(${d.rotate})`)
-      .style("fill", d.shadowColor)
-      .style("opacity", 0.2);
-  });
-}
+    const el = document.createElementNS(NS, "text");
+    el.setAttribute("x", w.x);
+    el.setAttribute("y", w.y);
+    el.setAttribute("text-anchor", "middle");
+    el.setAttribute("dominant-baseline", "middle");
 
-function getCloudDimensions() {
-  // Use a fixed logical canvas. The SVG viewBox scales this to fit the
-  // container via CSS, so d3-cloud always lays out at these exact pixel
-  // dimensions and words never collide due to unexpected scaling.
-  return { width: 960, height: 490 };
-}
-
-function layoutWords(words, settings) {
-  return new Promise(resolve => {
-    d3.layout.cloud()
-      .size([settings.width, settings.height])
-      .words(words.map(w => ({ ...w, size: settings.sizeScale(w.value) * w.emphasis })))
-      .padding(settings.padding)
-      .rotate(d => settings.allowRotation ? d.rotate : 0)
-      .font(d => d.font)
-      .fontSize(d => d.size)
-      .spiral("archimedean")
-      .on("end", placed => resolve(placed))
-      .start();
-  });
-}
-
-function placedSuccessfully(placed, total) {
-  // d3-cloud signals a failed placement in two ways:
-  //   1. The word is simply omitted from the results array.
-  //   2. The word is included but left at (0, 0) — the origin — because it
-  //      could not find a free slot and was never moved from its start position.
-  // We treat any word at exactly (0, 0) as unplaced so the retry loop keeps
-  // reducing font sizes until every word has a real position.
-  const reallyPlaced = placed.filter(w => !(w.x === 0 && w.y === 0));
-  return reallyPlaced.length === total;
-}
-
-async function computePlacedWords() {
-  const { width, height } = getCloudDimensions();
-  const words = styleWordsForCloud();
-  const maxCount = Math.max(...words.map(w => w.value));
-  const minCount = Math.min(...words.map(w => w.value));
-
-  // Use a sqrt scale so frequent words are prominent without crowding out others.
-  // Each attempt reduces font sizes and increases padding until all words have
-  // a real position (none stuck at the centre origin).
-  const attempts = [
-    { maxSize: 72, minSize: 20, padding: 18, allowRotation: true  },
-    { maxSize: 60, minSize: 18, padding: 22, allowRotation: false },
-    { maxSize: 50, minSize: 16, padding: 26, allowRotation: false },
-    { maxSize: 42, minSize: 14, padding: 30, allowRotation: false },
-    { maxSize: 34, minSize: 12, padding: 34, allowRotation: false },
-  ];
-
-  let placed = [];
-  for (const attempt of attempts) {
-    const sizeScale = d3.scaleSqrt()
-      .domain([minCount, maxCount || 1])
-      .range([attempt.minSize, attempt.maxSize]);
-    const settings = { width, height, sizeScale, padding: attempt.padding, allowRotation: attempt.allowRotation };
-    placed = await layoutWords(words, settings);
-    if (placedSuccessfully(placed, words.length)) break;
+    let css = `font:${fontStr};fill:${w.color};letter-spacing:${w.letterSpacing};`;
+    if (w.stroke !== "none") css += `stroke:${w.stroke};stroke-width:${w.strokeWidth}px;paint-order:stroke fill;`;
+    if (w.category === "echo" || w.category === "bright") css += "filter:url(#softGlow);";
+    el.style.cssText = css;
+    el.setAttribute("class", `word word--${w.category}`);
+    el.textContent = w.text;
+    svg.appendChild(el);
   }
 
-  // Strip any remaining (0, 0) stragglers that survived all attempts rather
-  // than rendering them piled up in the centre of the cloud.
-  placed = placed.filter(w => !(w.x === 0 && w.y === 0));
-
-  currentPlacedWords = placed;
-  return { placed, width, height };
+  return svg;
 }
 
 async function drawCloud() {
@@ -393,50 +443,20 @@ async function drawCloud() {
   }
 
   els.cloudMessage.textContent = "";
-  els.cloudStage.innerHTML = "";
+  // Build off-screen, then swap in — prevents the visible blink from innerHTML clear
+  const stageWidth  = els.cloudStage.clientWidth  || 960;
+  const stageHeight = els.cloudStage.clientHeight || 490;
 
-  const { placed, width, height } = await computePlacedWords();
+  const wordData = buildWordData(stageWidth, stageHeight);
+  const placed   = placeWords(stageWidth, stageHeight, wordData);
+  currentPlacedWords = placed;
 
-  const svg = d3.select(els.cloudStage)
-    .append("svg")
-    .attr("viewBox", `0 0 ${width} ${height}`)
-    .attr("preserveAspectRatio", "xMidYMid meet")
-    .style("width", "100%")
-    .style("height", "100%")
-    .attr("aria-label", "Word cloud");
+  const svg = renderSvg(placed, stageWidth, stageHeight);
 
-  const defs = svg.append("defs");
-  const glow = defs.append("filter").attr("id", "softGlow");
-  glow.append("feGaussianBlur").attr("stdDeviation", "1.2").attr("result", "blur");
-  glow.append("feMerge")
-    .selectAll("feMergeNode")
-    .data(["blur", "SourceGraphic"])
-    .enter()
-    .append("feMergeNode")
-    .attr("in", d => d);
-
-  const group = svg.append("g").attr("transform", `translate(${width / 2},${height / 2})`);
-
-  const textNodes = group.selectAll("text.word")
-    .data(placed)
-    .enter()
-    .append("text")
-    .attr("class", d => `word word--${d.category}`)
-    .style("font-family", d => d.font)
-    .style("font-size", d => `${d.size}px`)
-    .style("font-weight", d => d.font.includes("Arial Black") ? "800" : d.font.includes("Courier") ? "700" : "600")
-    .style("font-style", d => d.category === "echo" ? "italic" : "normal")
-    .style("fill", d => d.color)
-    .style("stroke", d => d.stroke)
-    .style("stroke-width", d => d.strokeWidth)
-    .style("paint-order", "stroke fill")
-    .style("letter-spacing", d => d.letterSpacing)
-    .style("filter", d => d.category === "bright" || d.category === "echo" ? "url(#softGlow)" : "none")
-    .attr("text-anchor", "middle")
-    .attr("transform", d => `translate(${d.x},${d.y}) rotate(${d.rotate || 0})`)
-    .text(d => d.text);
-
-  drawEchoTrails(textNodes);
+  // Swap: remove old SVG (if any) then insert new one atomically
+  const existing = els.cloudStage.querySelector("svg");
+  if (existing) existing.remove();
+  els.cloudStage.appendChild(svg);
 }
 
 async function downloadCloudAsJpeg() {
@@ -448,7 +468,8 @@ async function downloadCloudAsJpeg() {
 
   const serializer = new XMLSerializer();
   const svgString = serializer.serializeToString(svgEl);
-  const { width, height } = getCloudDimensions();
+  const width  = els.cloudStage.clientWidth  || 960;
+  const height = els.cloudStage.clientHeight || 490;
 
   const canvas = document.createElement("canvas");
   canvas.width = width * 2;
