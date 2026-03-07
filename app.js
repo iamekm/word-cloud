@@ -243,7 +243,8 @@ async function loadWords() {
 
 // ─── Word cloud rendering ────────────────────────────────────────────────────
 // Three modes:
-//   "acoustic" — colourful, category-styled, subtle rotations (default)
+//   "acoustic" — muted tonal palette, opacity-as-distance, gentle tilts,
+//                disciplined fonts, echo trails on dominant words only
 //   "mono"     — clean black & white, single font, no rotation
 //   "fun"      — wild colours, mixed fonts, steep tilts, big size swings
 
@@ -252,12 +253,14 @@ let cloudMode = "acoustic"; // persists across redraws
 // ── Palettes ──────────────────────────────────────────────────────────────────
 
 const PALETTES = {
+  // Acoustic: muted, tonal — dusty blues, warm ambers, soft purples, slate.
+  // Colours you'd associate with acoustic spaces: wood, concrete, cloth, air.
   acoustic: {
-    echo:    ["#5b6ee1", "#7c72ff", "#b05fd3", "#2e86ab"],
-    harsh:   ["#c44536", "#d66a2f", "#6c5b7b", "#4a4e69"],
-    deep:    ["#264653", "#355070", "#3d405b", "#2b2d42"],
-    bright:  ["#0a9396", "#3a86ff", "#e07a00", "#8ecae6"],
-    neutral: ["#355070", "#6d597a", "#2a9d8f", "#bc6c25", "#8d99ae"],
+    echo:    ["#7b8cde", "#9d8ec4", "#6e9fc2", "#a98fc4"],  // airy purples/blues
+    harsh:   ["#8c5a4a", "#7a6651", "#5c5470", "#6b4c3b"],  // dry browns/muted reds
+    deep:    ["#3a4a5c", "#445566", "#384454", "#2e3d50"],   // dark slates
+    bright:  ["#6aa3a8", "#7ab5a0", "#5e9ea8", "#89b0a8"],  // muted teals
+    neutral: ["#6b7a8d", "#7d6e7a", "#5e7a72", "#8a7560", "#6e7e8a"],
   },
   fun: [
     "#e63946","#f4a261","#2a9d8f","#e9c46a","#264653",
@@ -289,34 +292,34 @@ const FUN_FONTS = [
 ];
 
 function fontForWord(mode, category, isPhrase, index) {
-  if (mode === "mono")     return "600 {S}px Arial,Helvetica,sans-serif";
-  if (mode === "fun")      return FUN_FONTS[index % FUN_FONTS.length];
-  // acoustic
-  if (category === "echo")  return "italic 600 {S}px Georgia,serif";
-  if (category === "harsh") return "700 {S}px 'Courier New',monospace";
-  if (isPhrase)             return "600 {S}px 'Trebuchet MS',Arial,sans-serif";
-  return "800 {S}px 'Arial Black',Arial,sans-serif";
+  if (mode === "mono") return "600 {S}px Arial,Helvetica,sans-serif";
+  if (mode === "fun")  return FUN_FONTS[index % FUN_FONTS.length];
+  // acoustic: considered, calm typography
+  // — lyrical/resonant words get a light-weight serif (feels like reverb tail)
+  // — percussive/harsh words get compressed monospace (feels clipped, dry)
+  // — everything else gets a clean light sans
+  if (category === "echo")  return "300 italic {S}px Georgia,'Times New Roman',serif";
+  if (category === "harsh") return "600 {S}px 'Courier New',monospace";
+  return "300 {S}px 'Trebuchet MS',Arial,sans-serif";
 }
 
 // ── Rotation angles ────────────────────────────────────────────────────────────
-// Phrases are never rotated (they're too wide to tilt readably).
-// Rotation is expressed in degrees and used both for SVG transform and for
-// swapping the bounding-box dimensions in the collision checker.
 
 function rotationForWord(mode, category, isPhrase, index) {
   if (isPhrase) return 0;
   if (mode === "mono") return 0;
   if (mode === "fun") {
-    // Cycle through a lively set of angles — every word has a chance to tilt
     const angles = [0, 0, 90, -90, 45, -45, 0, 90, -45, 0, 45, -90];
     return angles[index % angles.length];
   }
-  // acoustic: only single short words tilt; harsh words favour 90°
-  const angles = [0, 0, 0, 90, 0, -90, 0, 0, 45, 0];
+  // acoustic: gentle off-axis tilts only — like sound waves slightly askew.
+  // Only about 1-in-4 words tilt; tilts are small (±15° or ±30°), never 90°.
+  // Harsh/percussive words tilt more — clipped, angular feel.
   if (category === "harsh") {
-    const harshAngles = [0, 90, 0, -90, 0, 90];
+    const harshAngles = [0, -15, 0, 30, -30, 0, 15, 0];
     return harshAngles[index % harshAngles.length];
   }
+  const angles = [0, 0, 0, -15, 0, 0, 15, 0, 0, -30, 0, 0, 30, 0, 0, 0];
   return angles[index % angles.length];
 }
 
@@ -334,18 +337,14 @@ function measureWord(text, fontTemplate, size) {
   return { w, h };
 }
 
-// When a word is rotated, its effective bounding box changes.
-// 90° / -90°: swap width and height.
-// 45° / -45°: use the diagonal (worst case).
-// 0°: unchanged.
+// Compute the axis-aligned bounding box of a rotated rectangle.
+// Used by the collision checker so rotated words don't overlap neighbours.
 function rotatedBounds(w, h, angleDeg) {
-  const a = Math.abs(angleDeg % 180);
-  if (a === 90)  return { w: h, h: w };
-  if (a === 45) {
-    const d = Math.ceil(Math.sqrt(w * w + h * h));
-    return { w: d, h: d };
-  }
-  return { w, h };
+  if (!angleDeg) return { w, h };
+  const r  = (Math.abs(angleDeg) % 180) * Math.PI / 180;
+  const bw = Math.ceil(Math.abs(w * Math.cos(r)) + Math.abs(h * Math.sin(r)));
+  const bh = Math.ceil(Math.abs(w * Math.sin(r)) + Math.abs(h * Math.cos(r)));
+  return { w: bw, h: bh };
 }
 
 // ── Spiral placement ───────────────────────────────────────────────────────────
@@ -406,14 +405,17 @@ function buildWordData(stageWidth, stageHeight) {
   const minCount = Math.min(...currentWordCounts.map(([, v]) => v));
   const countRange = maxCount - minCount || 1;
 
-  // Size range varies by mode
+  // Size range varies by mode.
+  // Acoustic uses a narrower range — frequency still registers but doesn't
+  // shout. A sinusoidal ripple is added so words at similar counts vary
+  // slightly, like amplitude variation in a real signal.
   const maxPx = Math.min(
-    cloudMode === "fun" ? 80 : 72,
-    Math.floor(stageWidth * (cloudMode === "fun" ? 0.30 : 0.26))
+    cloudMode === "fun" ? 80 : cloudMode === "acoustic" ? 62 : 72,
+    Math.floor(stageWidth * (cloudMode === "fun" ? 0.30 : cloudMode === "acoustic" ? 0.22 : 0.26))
   );
   const minPx = Math.max(
-    cloudMode === "fun" ? 13 : 14,
-    Math.floor(maxPx * (cloudMode === "fun" ? 0.18 : 0.22))
+    cloudMode === "fun" ? 13 : cloudMode === "acoustic" ? 15 : 14,
+    Math.floor(maxPx * (cloudMode === "fun" ? 0.18 : cloudMode === "acoustic" ? 0.30 : 0.22))
   );
 
   return currentWordCounts.map(([text, value], i) => {
@@ -421,14 +423,17 @@ function buildWordData(stageWidth, stageHeight) {
     const isPhrase     = text.includes(" ");
     const fontTemplate = fontForWord(cloudMode, category, isPhrase, i);
     const rotate       = rotationForWord(cloudMode, category, isPhrase, i);
-    const t            = (value - minCount) / countRange;
-    const size         = Math.round(minPx + Math.sqrt(t) * (maxPx - minPx));
-    const emphasis     = /really|very|extremely|super/i.test(text) ? 1.08 : 1.0;
+    const t            = (value - minCount) / countRange;  // 0–1 by frequency
+
+    // Acoustic: add a subtle sine ripple so identically-frequent words still
+    // differ slightly in size — mimics natural amplitude variation
+    const ripple   = cloudMode === "acoustic" ? Math.sin(i * 1.7) * 2 : 0;
+    const baseSize = Math.round(minPx + Math.sqrt(t) * (maxPx - minPx) + ripple);
+    const emphasis = /really|very|extremely|super/i.test(text) ? 1.08 : 1.0;
 
     // Colour
     let color;
     if (cloudMode === "mono") {
-      // Greyscale: most-used words are darkest
       const grey = Math.round(20 + (1 - t) * 160);
       color = `rgb(${grey},${grey},${grey})`;
     } else if (cloudMode === "fun") {
@@ -438,25 +443,33 @@ function buildWordData(stageWidth, stageHeight) {
       color = palette[i % palette.length];
     }
 
-    // Decorative properties (acoustic & fun only)
-    const letterSpacing = (cloudMode !== "mono" && category === "echo") ? "0.03em"
-                        : (cloudMode !== "mono" && category === "harsh") ? "0.01em" : "0";
-    const stroke      = cloudMode === "mono" ? "none"
-                      : cloudMode === "fun"  ? "none"
-                      : category === "bright" ? "rgba(255,255,255,.52)"
-                      : category === "harsh"  ? "rgba(24,24,24,.18)" : "none";
-    const strokeWidth = category === "bright" ? 1 : 0.6;
-    const shadowColor = category === "echo"  ? "rgba(124,114,255,.24)"
-                      : category === "deep"  ? "rgba(22,35,48,.2)"
-                      : "rgba(58,134,255,.12)";
-    const glow        = cloudMode !== "mono" && (category === "echo" || category === "bright");
-    const trail       = cloudMode !== "mono" && (category === "echo" || category === "deep");
+    // Acoustic: opacity as distance — frequent words feel close and present,
+    // rare words feel distant, like sound decaying across a room.
+    // Fun/mono: always fully opaque.
+    const opacity = cloudMode === "acoustic"
+      ? Math.round((0.45 + t * 0.55) * 100) / 100   // 0.45 → 1.0
+      : 1;
+
+    // Letter-spacing as texture (acoustic only)
+    const letterSpacing = cloudMode === "acoustic" && category === "echo"  ? "0.06em"
+                        : cloudMode === "acoustic" && category === "harsh" ? "-0.02em"
+                        : cloudMode === "acoustic" && category === "deep"  ? "0.02em"
+                        : "0";
+
+    // Echo trails only on the top-half words by frequency (dominant frequencies)
+    const isProminent  = t >= 0.5;
+    const shadowColor  = category === "echo" ? "rgba(100,110,200,.20)"
+                       : category === "deep" ? "rgba(20,32,48,.18)"
+                       : "rgba(80,100,130,.12)";
+    const glow  = cloudMode === "acoustic" && category === "echo" && isProminent;
+    const trail = cloudMode === "acoustic" && (category === "echo" || category === "deep") && isProminent;
 
     return {
       text, value, category, fontTemplate,
-      size: Math.round(size * emphasis),
-      rotate, color, letterSpacing,
-      stroke, strokeWidth, shadowColor, glow, trail,
+      size: Math.round(baseSize * emphasis),
+      rotate, color, opacity, letterSpacing,
+      stroke: "none", strokeWidth: 0,
+      shadowColor, glow, trail,
     };
   });
 }
@@ -518,6 +531,7 @@ function renderSvg(placed, stageWidth, stageHeight) {
     if (transform) el.setAttribute("transform", `translate(${w.x},${w.y}) ${transform} translate(${-w.x},${-w.y})`);
 
     let css = `font:${fontStr};fill:${w.color};letter-spacing:${w.letterSpacing};`;
+    if (w.opacity !== undefined && w.opacity < 1) css += `opacity:${w.opacity};`;
     if (w.stroke !== "none") css += `stroke:${w.stroke};stroke-width:${w.strokeWidth}px;paint-order:stroke fill;`;
     if (w.glow) css += "filter:url(#softGlow);";
     el.style.cssText = css;
