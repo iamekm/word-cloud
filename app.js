@@ -1124,7 +1124,21 @@ async function init() {
     .on("postgres_changes", { event: "*", schema: "public", table: "experiences" }, async () => {
       await refreshAll(!els.cloudWrap.classList.contains("is-hidden"));
     })
-    .subscribe();
+    .subscribe((status) => {
+      const dot  = document.getElementById("realtimeDot");
+      const text = document.getElementById("realtimeText");
+      if (!dot || !text) return;
+      if (status === "SUBSCRIBED") {
+        dot.className  = "rt-dot rt-connected";
+        text.textContent = "Live";
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        dot.className  = "rt-dot rt-error";
+        text.textContent = "Reconnecting…";
+      } else {
+        dot.className  = "rt-dot rt-connecting";
+        text.textContent = "Connecting…";
+      }
+    });
 }
 
 init();

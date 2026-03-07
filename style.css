@@ -240,3 +240,28 @@ button:hover { transform:translateY(-1px); }
 .word-cloud-stage text.word {
   cursor: default;
 }
+
+/* ── Realtime status indicator ────────────────────────────────────────────── */
+.rt-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: .78rem;
+  color: var(--muted);
+}
+.rt-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background .4s;
+}
+.rt-connecting { background: #f0a500; animation: rt-blink 1.2s ease-in-out infinite; }
+.rt-connected  { background: #2a9d6a; }
+.rt-error      { background: #c44536; animation: rt-blink 0.6s ease-in-out infinite; }
+
+@keyframes rt-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
