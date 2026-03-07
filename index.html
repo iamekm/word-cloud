@@ -6,7 +6,8 @@
   <title>Acoustic Word Cloud</title>
   <link rel="stylesheet" href="./style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.3/src/wordcloud2.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1/build/d3.layout.cloud.js"></script>
 </head>
 <body>
   <main class="shell">
@@ -14,7 +15,7 @@
       <div>
         <p class="eyebrow">Shared listening tool</p>
         <h1>Acoustic Word Cloud</h1>
-        <p class="lede">You [1] can choose an experience, [2] submit a descriptive word or phrase, [3] unlock the word cloud view when ready.</p>
+        <p class="lede">Participants can choose an experience, submit a descriptive word or phrase, and you can unlock the cloud view when you are ready.</p>
       </div>
       <button id="refreshBtn" class="ghost-btn" type="button">Refresh cloud</button>
     </header>
@@ -22,7 +23,7 @@
     <section class="grid two-up">
       <section class="card">
         <h2>1. Choose an experience</h2>
-        <p class="muted">You can switch between available experiences.</p>
+        <p class="muted">Participants can switch between available experiences.</p>
         <div class="stack">
           <label for="experienceSelect">Experience</label>
           <select id="experienceSelect"></select>
@@ -32,14 +33,14 @@
 
       <section class="card">
         <h2>2. Add a word or phrase</h2>
-        <p class="muted">Short phrases are allowed, for example <em>really loud</em>.</p>
+        <p class="muted">Short phrases are allowed, for example <em>really great</em>.</p>
         <form id="wordForm" class="stack">
           <label for="wordInput">Word or phrase</label>
           <input id="wordInput" name="word" type="text" maxlength="80" placeholder="e.g. really resonant" autocomplete="off" required />
           <button class="primary-btn" type="submit">Submit response</button>
         </form>
-        <p class="privacy-note"><b>Please do not submit personal information. Responses may be visible to other participants and are stored publicly for this session.</b></p>
-        <p>To request deletion of a response you submitted, please contact the workshop leader (admin).</p>
+        <p class="privacy-note">Please do not submit personal information. Responses may be visible to other participants and are stored publicly for this session.</p>
+        <p class="privacy-note">If you would like a response you submitted to be permanently deleted, please contact the workshop leader (admin).</p>
         <p id="submitMessage" class="message" aria-live="polite"></p>
       </section>
     </section>
@@ -65,14 +66,14 @@
           <button id="revealBtn" class="primary-btn" type="button">Unlock and reveal cloud</button>
           <button id="hideBtn" class="ghost-btn" type="button">Hide cloud</button>
         </div>
-        <p class="privacy-note">Please note, this is a presentation lock rather than full privacy protection, because the app still reads publicly accessible workshop data.</p>
+        <p class="privacy-note">This is a presentation lock rather than full privacy protection, because the app still reads public workshop data.</p>
         <p id="cloudMessage" class="message muted"></p>
       </section>
     </section>
 
     <section class="card cloud-card">
       <div id="cloudWrap" class="cloud-wrap is-hidden">
-        <canvas id="wordCloudCanvas" width="1200" height="700"></canvas>
+        <div id="wordCloudStage" class="word-cloud-stage"></div>
       </div>
     </section>
 
