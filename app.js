@@ -557,8 +557,7 @@ function renderSvg(placed, stageWidth, stageHeight) {
         50%      { transform: rotate(var(--base-rot,0deg)) translateY(-10px); }
       }`,
     ];
-    style.textContent = FUN_ANIMATIONS.join("
-");
+    style.textContent = FUN_ANIMATIONS.join(" ");
     defs.appendChild(style);
   }
 
