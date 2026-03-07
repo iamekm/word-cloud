@@ -14,62 +14,66 @@
       <div>
         <p class="eyebrow">Shared listening tool</p>
         <h1>Acoustic Word Cloud</h1>
-        <p class="lede">Participants can each submit a single word from any device. When you reveal the cloud, the shared vocabulary appears live for the current experience.</p>
+        <p class="lede">Participants can choose an experience, submit a descriptive word or phrase, and reveal a grouped word cloud when you are ready.</p>
       </div>
       <button id="refreshBtn" class="ghost-btn" type="button">Refresh cloud</button>
     </header>
 
-    <section class="grid">
+    <section class="grid two-up">
       <section class="card">
-        <h2>1. Add a word</h2>
-        <p class="muted">Enter one word only. This is saved to the current experience.</p>
-
-        <form id="wordForm" class="stack">
-          <label for="wordInput">Word</label>
-          <input id="wordInput" name="word" type="text" maxlength="40" placeholder="e.g. resonant" autocomplete="off" required />
-          <button class="primary-btn" type="submit">Submit word</button>
-        </form>
-
-        <p id="submitMessage" class="message" aria-live="polite"></p>
+        <h2>1. Choose an experience</h2>
+        <p class="muted">Participants can switch between available experiences.</p>
+        <div class="stack">
+          <label for="experienceSelect">Experience</label>
+          <select id="experienceSelect"></select>
+        </div>
+        <p id="experienceMessage" class="message muted"></p>
       </section>
 
       <section class="card">
-        <h2>2. Current experience</h2>
-        <div class="stack">
-          <div class="stat">
-            <span class="stat-label">Name</span>
-            <strong id="experienceName">Loading…</strong>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Responses</span>
-            <strong id="responseCount">0</strong>
-          </div>
-        </div>
+        <h2>2. Add a word or phrase</h2>
+        <p class="muted">Short phrases are allowed, for example <em>really great</em>.</p>
+        <form id="wordForm" class="stack">
+          <label for="wordInput">Word or phrase</label>
+          <input id="wordInput" name="word" type="text" maxlength="80" placeholder="e.g. really resonant" autocomplete="off" required />
+          <button class="primary-btn" type="submit">Submit response</button>
+        </form>
+        <p id="submitMessage" class="message" aria-live="polite"></p>
       </section>
     </section>
 
-    <section class="card cloud-card">
-      <div class="cloud-header">
-        <div>
-          <h2>3. Reveal the cloud</h2>
-          <p class="muted">Click reveal when you want to display the group response.</p>
+    <section class="grid two-up">
+      <section class="card">
+        <h2>3. Selected experience</h2>
+        <div class="stack">
+          <div class="stat"><span class="stat-label">Name</span><strong id="experienceName">Loading…</strong></div>
+          <div class="stat"><span class="stat-label">Responses</span><strong id="responseCount">0</strong></div>
+          <div class="stat"><span class="stat-label">Status</span><strong id="experienceStatus">—</strong></div>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>4. Reveal the cloud</h2>
+        <p class="muted">Near-duplicate entries are grouped automatically.</p>
         <div class="button-row">
           <button id="revealBtn" class="primary-btn" type="button">Reveal word cloud</button>
           <button id="hideBtn" class="ghost-btn" type="button">Hide cloud</button>
         </div>
-      </div>
+        <p id="cloudMessage" class="message muted"></p>
+      </section>
+    </section>
+
+    <section class="card cloud-card">
       <div id="cloudWrap" class="cloud-wrap is-hidden">
         <canvas id="wordCloudCanvas" width="1200" height="700"></canvas>
       </div>
-      <p id="cloudMessage" class="message muted"></p>
     </section>
 
     <section class="card">
       <div class="admin-header">
         <div>
           <h2>Admin controls</h2>
-          <p class="muted">Start a fresh experience or clear the current one.</p>
+          <p class="muted">Create, clear, activate, or delete experiences individually.</p>
         </div>
         <button id="toggleAdminBtn" class="ghost-btn" type="button">Show admin</button>
       </div>
@@ -88,16 +92,25 @@
           </form>
 
           <div class="stack">
-            <label>Clear responses</label>
-            <button id="clearCurrentBtn" class="danger-btn" type="button">Clear current experience</button>
+            <label for="adminExperienceSelect">Selected admin experience</label>
+            <select id="adminExperienceSelect"></select>
+            <div class="button-row">
+              <button id="activateExperienceBtn" class="ghost-btn" type="button">Make active</button>
+              <button id="clearCurrentBtn" class="danger-btn" type="button">Clear responses</button>
+            </div>
           </div>
+        </div>
+
+        <div class="stack admin-delete-block">
+          <label for="deleteExperienceSelect">Delete an experience</label>
+          <select id="deleteExperienceSelect"></select>
+          <button id="deleteExperienceBtn" class="danger-btn" type="button">Delete selected experience</button>
         </div>
 
         <p id="adminMessage" class="message" aria-live="polite"></p>
       </div>
     </section>
   </main>
-
   <script src="./config.js"></script>
   <script src="./app.js"></script>
 </body>
