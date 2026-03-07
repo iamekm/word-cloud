@@ -30,5 +30,6 @@ button:hover { transform:translateY(-1px); }
 .stat-label { display:block; font-size:.85rem; color:var(--muted); margin-bottom:4px; }
 .muted { color:var(--muted); }
 .message { min-height:1.2em; margin-top:12px; }
+.privacy-note { font-size:.85rem; color:var(--muted); margin-top:8px; line-height:1.45; }
 .is-hidden { display:none; }
 @media (max-width:840px){ .two-up,.admin-grid{grid-template-columns:1fr;} .hero,.admin-header{flex-direction:column;} .shell{padding:16px;} }

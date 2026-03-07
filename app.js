@@ -42,12 +42,49 @@ let currentWordCounts = [];
 function cleanPhrase(raw) {
   return String(raw || "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[^\p{L}\p{N}\s'-]/gu, "").trim();
 }
+
 function titleCasePhrase(phrase) {
   return phrase.split(" ").filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
+
 function escapeHtml(value) {
   return String(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
+
+function looksLikeEmail(value) {
+  return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value);
+}
+
+function looksLikePhoneOrLongNumber(value) {
+  const digits = (value.match(/\d/g) || []).length;
+  return digits >= 7;
+}
+
+function looksLikeUrl(value) {
+  return /(https?:\/\/|www\.)/i.test(value);
+}
+
+function looksLikeFullName(value) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length !== 2) return false;
+  return parts.every(part => /^[A-Z][a-z'-]{1,}$/.test(part));
+}
+
+function validateSubmission(rawValue) {
+  const original = String(rawValue || "").trim();
+
+  if (!original) {
+    return "Please enter a word or short phrase.";
+  }
+  if (looksLikeEmail(original) || looksLikePhoneOrLongNumber(original) || looksLikeUrl(original)) {
+    return "Please do not submit contact details, links, or other personal information.";
+  }
+  if (looksLikeFullName(original)) {
+    return "Please avoid submitting names or personal information.";
+  }
+  return "";
+}
+
 function renderExperienceOptions() {
   const optionsHtml = allExperiences.length
     ? allExperiences.map(exp => `<option value="${escapeHtml(exp.id)}">${escapeHtml(exp.name)}${exp.is_active ? " (active)" : ""}</option>`).join("")
@@ -58,18 +95,21 @@ function renderExperienceOptions() {
   [els.experienceSelect, els.adminExperienceSelect, els.deleteExperienceSelect].forEach(select => { if (selectedExperienceId) select.value = selectedExperienceId; });
   updateExperienceMeta();
 }
+
 function updateExperienceMeta() {
   const selected = allExperiences.find(exp => exp.id === selectedExperienceId);
   els.experienceName.textContent = selected?.name || "No experience selected";
   els.experienceStatus.textContent = selected ? (selected.is_active ? "Active" : "Available") : "—";
   els.experienceMessage.textContent = selected ? "" : "There are no available experiences yet.";
 }
+
 async function loadExperiences() {
   const { data, error } = await db.from("experiences").select("id, name, is_active, created_at").order("created_at", { ascending: false });
   if (error) { console.error(error); els.experienceMessage.textContent = "Could not load experiences."; return; }
   allExperiences = data || [];
   renderExperienceOptions();
 }
+
 function levenshtein(a, b) {
   const rows = a.length + 1, cols = b.length + 1;
   const matrix = Array.from({ length: rows }, () => new Array(cols).fill(0));
@@ -83,6 +123,7 @@ function levenshtein(a, b) {
   }
   return matrix[a.length][b.length];
 }
+
 function shouldGroupPhrases(a, b) {
   if (a === b) return true;
   const longEnough = Math.max(a.length, b.length);
@@ -91,6 +132,7 @@ function shouldGroupPhrases(a, b) {
   if (longEnough <= 12) return distance <= 2;
   return distance <= 2;
 }
+
 function groupSimilarResponses(responses) {
   const sorted = [...responses].sort((a, b) => a.localeCompare(b));
   const groups = [];
@@ -111,6 +153,7 @@ function groupSimilarResponses(responses) {
     return [titleCasePhrase(bestLabel), group.count];
   }).sort((a, b) => b[1] - a[1]);
 }
+
 async function loadWords() {
   if (!selectedExperienceId) { currentWordCounts = []; els.responseCount.textContent = "0"; return []; }
   const { data, error } = await db.from("words").select("word").eq("experience_id", selectedExperienceId);
@@ -120,6 +163,7 @@ async function loadWords() {
   els.responseCount.textContent = String(cleaned.length);
   return currentWordCounts;
 }
+
 function drawCloud() {
   if (!currentWordCounts.length) { els.cloudMessage.textContent = "No responses yet for this experience."; return; }
   els.cloudMessage.textContent = "";
@@ -136,22 +180,26 @@ function drawCloud() {
     shrinkToFit: true,
   });
 }
+
 async function refreshAll(renderCloud = false) {
   await loadExperiences();
   await loadWords();
   if (renderCloud && !els.cloudWrap.classList.contains("is-hidden")) drawCloud();
 }
+
 async function submitWord(event) {
   event.preventDefault();
   if (!selectedExperienceId) { els.submitMessage.textContent = "Please select an experience first."; return; }
+  const validationMessage = validateSubmission(els.wordInput.value);
+  if (validationMessage) { els.submitMessage.textContent = validationMessage; return; }
   const cleaned = cleanPhrase(els.wordInput.value);
-  if (!cleaned) { els.submitMessage.textContent = "Please enter a word or short phrase."; return; }
   const { error } = await db.from("words").insert({ experience_id: selectedExperienceId, word: cleaned });
   if (error) { console.error(error); els.submitMessage.textContent = "Could not save your response. Please try again."; return; }
   els.wordInput.value = "";
   els.submitMessage.textContent = "Saved.";
   await refreshAll(!els.cloudWrap.classList.contains("is-hidden"));
 }
+
 async function startNewExperience(event) {
   event.preventDefault();
   const passcode = els.adminPasscode.value.trim();
@@ -166,6 +214,7 @@ async function startNewExperience(event) {
   els.cloudWrap.classList.add("is-hidden");
   await refreshAll(false);
 }
+
 async function activateSelectedExperience() {
   const passcode = els.adminPasscode.value.trim();
   const experienceId = els.adminExperienceSelect.value;
@@ -178,6 +227,7 @@ async function activateSelectedExperience() {
   els.adminMessage.textContent = "Experience made active.";
   await refreshAll(!els.cloudWrap.classList.contains("is-hidden"));
 }
+
 async function clearSelectedExperience() {
   const passcode = els.adminPasscode.value.trim();
   const experienceId = els.adminExperienceSelect.value;
@@ -190,6 +240,7 @@ async function clearSelectedExperience() {
   els.adminMessage.textContent = "Selected experience cleared.";
   await refreshAll(!els.cloudWrap.classList.contains("is-hidden"));
 }
+
 async function deleteSelectedExperience() {
   const passcode = els.adminPasscode.value.trim();
   const experienceId = els.deleteExperienceSelect.value;
@@ -205,12 +256,15 @@ async function deleteSelectedExperience() {
   els.cloudWrap.classList.add("is-hidden");
   await refreshAll(false);
 }
+
 function toggleAdmin() {
   els.adminPanel.classList.toggle("is-hidden");
   els.toggleAdminBtn.textContent = els.adminPanel.classList.contains("is-hidden") ? "Show admin" : "Hide admin";
 }
+
 function revealCloud() { els.cloudWrap.classList.remove("is-hidden"); drawCloud(); }
 function hideCloud() { els.cloudWrap.classList.add("is-hidden"); }
+
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const wrapWidth = els.cloudWrap.clientWidth || 1200;
@@ -222,6 +276,7 @@ function resizeCanvas() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (!els.cloudWrap.classList.contains("is-hidden") && currentWordCounts.length) drawCloud();
 }
+
 function syncSelectedExperience(value) {
   selectedExperienceId = value || null;
   if (els.experienceSelect.querySelector(`option[value="${value}"]`)) els.experienceSelect.value = value;
@@ -229,6 +284,7 @@ function syncSelectedExperience(value) {
   updateExperienceMeta();
   loadWords().then(() => { if (!els.cloudWrap.classList.contains("is-hidden")) drawCloud(); });
 }
+
 async function init() {
   await refreshAll(false);
   els.experienceSelect.addEventListener("change", event => syncSelectedExperience(event.target.value));
