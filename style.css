@@ -220,3 +220,23 @@ button:hover { transform:translateY(-1px); }
 .pulse-attention {
   animation: pulse-attention 0.7s ease-out 2;
 }
+
+/* ── Word tooltip ─────────────────────────────────────────────────────────── */
+.word-tooltip {
+  background: rgba(17,17,17,0.82);
+  color: #fff;
+  font-size: .82rem;
+  font-family: Arial, Helvetica, sans-serif;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  transition: opacity .1s;
+}
+
+/* ── Word cloud fade-in ───────────────────────────────────────────────────── */
+.word-cloud-stage text.word {
+  cursor: default;
+}

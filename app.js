@@ -488,6 +488,185 @@ function buildWordData(stageWidth, stageHeight) {
   });
 }
 
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+
+const _tooltip = (() => {
+  const el = document.createElement("div");
+  el.className = "word-tooltip";
+  el.style.cssText = "position:fixed;pointer-events:none;display:none;z-index:9999;";
+  document.body.appendChild(el);
+  return el;
+})();
+
+function showTooltip(evt, word) {
+  const n = word.value;
+  _tooltip.textContent = n === 1 ? "1 person said this" : `${n} people said this`;
+  _tooltip.style.display = "block";
+  moveTooltip(evt);
+}
+function moveTooltip(evt) {
+  const pad = 14;
+  let x = evt.clientX + pad;
+  let y = evt.clientY - 36;
+  if (x + 180 > window.innerWidth)  x = evt.clientX - 180;
+  if (y < 8) y = evt.clientY + pad;
+  _tooltip.style.left = x + "px";
+  _tooltip.style.top  = y + "px";
+}
+function hideTooltip() { _tooltip.style.display = "none"; }
+
+// ── Confetti ───────────────────────────────────────────────────────────────────
+
+function burstConfetti() {
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:10;border-radius:inherit;";
+  const rect = els.cloudStage.getBoundingClientRect();
+  canvas.width  = rect.width;
+  canvas.height = rect.height;
+  els.cloudStage.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  const COLOURS = ["#ff006e","#ffbe0b","#3a86ff","#06d6a0","#f72585","#aaff00","#4cc9f0","#ff4d6d","#ffd60a","#b5179e"];
+  const SHAPES  = ["rect","circle","strip"];
+
+  const particles = Array.from({ length: 120 }, () => ({
+    x:     canvas.width  * (0.2 + Math.random() * 0.6),
+    y:     canvas.height * (0.2 + Math.random() * 0.4),
+    vx:    (Math.random() - 0.5) * 9,
+    vy:    (Math.random() - 0.8) * 10,
+    rot:   Math.random() * Math.PI * 2,
+    vrot:  (Math.random() - 0.5) * 0.25,
+    w:     6 + Math.random() * 10,
+    h:     4 + Math.random() * 6,
+    color: COLOURS[Math.floor(Math.random() * COLOURS.length)],
+    shape: SHAPES[Math.floor(Math.random() * SHAPES.length)],
+    alpha: 1,
+  }));
+
+  const gravity = 0.28;
+  let running = true;
+  let startTime = null;
+  const DURATION = 3200;
+
+  function tick(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    if (elapsed > DURATION) {
+      canvas.remove();
+      return;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of particles) {
+      p.vy  += gravity;
+      p.x   += p.vx;
+      p.y   += p.vy;
+      p.rot += p.vrot;
+      p.alpha = Math.max(0, 1 - elapsed / DURATION);
+      ctx.save();
+      ctx.globalAlpha = p.alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      if (p.shape === "rect") {
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      } else if (p.shape === "circle") {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-p.w / 2, -p.h / 4, p.w, p.h / 2);
+      }
+      ctx.restore();
+    }
+    if (running) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // Stop if cloud is hidden mid-burst
+  const observer = new MutationObserver(() => { if (!canvas.isConnected) running = false; });
+  observer.observe(els.cloudStage, { childList: true });
+}
+
+// ── Fun-mode animation loop (drift, colour cycle, pulse) ──────────────────────
+// Each word element gets a live data object; a single rAF loop updates all of
+// them each frame. Drift is bounded so words bounce off stage edges.
+
+let _funLoopId    = null;   // rAF handle — cancelled on redraw
+let _funWordNodes = [];     // { el, data, vx, vy, hue, hueSpeed, pulsePhase, pulseSpeed, cx, cy }
+
+function stopFunLoop() {
+  if (_funLoopId) { cancelAnimationFrame(_funLoopId); _funLoopId = null; }
+  _funWordNodes = [];
+}
+
+function startFunLoop(placed, svgEl, stageWidth, stageHeight) {
+  stopFunLoop();
+
+  _funWordNodes = placed.map((w, i) => {
+    const el = svgEl.querySelector(`[data-fun-idx="${i}"]`);
+    if (!el) return null;
+    // Initial velocity: small random vector
+    const speed = 0.4 + Math.random() * 0.7;
+    const angle = Math.random() * Math.PI * 2;
+    // Parse initial hue from the color string (hex → hsl)
+    const hue = (i * 37 + 20) % 360;
+    return {
+      el,
+      // current position (centre of bounding box)
+      cx: w.x, cy: w.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      hw: w.w / 2, hh: w.h / 2,   // half-dimensions for edge detection
+      hue,
+      hueSpeed: 0.3 + Math.random() * 0.5,
+      pulsePhase: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.4 + Math.random() * 0.8,
+      baseRotate: w.rotate || 0,
+      saturation: 90 + Math.random() * 10,
+      lightness:  42 + Math.random() * 16,
+    };
+  }).filter(Boolean);
+
+  const margin = 6;
+
+  function tick() {
+    const now = performance.now() / 1000;
+    for (const n of _funWordNodes) {
+      // Drift
+      n.cx += n.vx;
+      n.cy += n.vy;
+
+      // Bounce off edges
+      if (n.cx - n.hw < margin)              { n.cx = margin + n.hw;              n.vx = Math.abs(n.vx); }
+      if (n.cx + n.hw > stageWidth  - margin){ n.cx = stageWidth  - margin - n.hw; n.vx = -Math.abs(n.vx); }
+      if (n.cy - n.hh < margin)              { n.cy = margin + n.hh;              n.vy = Math.abs(n.vy); }
+      if (n.cy + n.hh > stageHeight - margin){ n.cy = stageHeight - margin - n.hh; n.vy = -Math.abs(n.vy); }
+
+      // Colour cycle
+      n.hue = (n.hue + n.hueSpeed) % 360;
+      const fill = `hsl(${n.hue},${n.saturation}%,${n.lightness}%)`;
+
+      // Pulse scale
+      const scale = 1 + 0.08 * Math.sin(now * n.pulseSpeed + n.pulsePhase);
+
+      // Apply — use transform on the element directly; it already has
+      // text-anchor:middle / dominant-baseline:middle so cx,cy is the centre
+      const rot = n.baseRotate;
+      n.el.setAttribute("x", n.cx);
+      n.el.setAttribute("y", n.cy);
+      n.el.style.fill = fill;
+      if (rot) {
+        n.el.setAttribute("transform",
+          `translate(${n.cx},${n.cy}) rotate(${rot}) scale(${scale}) translate(${-n.cx},${-n.cy})`);
+      } else {
+        n.el.setAttribute("transform", `translate(${n.cx},${n.cy}) scale(${scale}) translate(${-n.cx},${-n.cy})`);
+      }
+    }
+    _funLoopId = requestAnimationFrame(tick);
+  }
+  _funLoopId = requestAnimationFrame(tick);
+}
+
 // ── SVG render ─────────────────────────────────────────────────────────────────
 
 function renderSvg(placed, stageWidth, stageHeight) {
@@ -497,8 +676,9 @@ function renderSvg(placed, stageWidth, stageHeight) {
   svg.setAttribute("width",  stageWidth);
   svg.setAttribute("height", stageHeight);
   svg.setAttribute("aria-label", "Word cloud");
+  svg.style.cssText = "position:relative;z-index:1;";
 
-  // Glow filter (used by echo + bright in acoustic/fun modes)
+  // Glow filter
   const defs   = document.createElementNS(NS, "defs");
   const filter = document.createElementNS(NS, "filter");
   filter.setAttribute("id", "softGlow");
@@ -516,70 +696,21 @@ function renderSvg(placed, stageWidth, stageHeight) {
   filter.appendChild(blur);
   filter.appendChild(merge);
   defs.appendChild(filter);
-
-  // Per-word animations (fun mode only)
-  if (cloudMode === "fun") {
-    const style = document.createElementNS(NS, "style");
-    const FUN_ANIMATIONS = [
-      // wobble: gentle side-to-side rock
-      `@keyframes wc-wobble {
-        0%,100% { transform-origin: center; transform: rotate(var(--base-rot,0deg)) scale(1); }
-        25%      { transform: rotate(calc(var(--base-rot,0deg) + 6deg)) scale(1.04); }
-        75%      { transform: rotate(calc(var(--base-rot,0deg) - 6deg)) scale(0.97); }
-      }`,
-      // bounce: vertical pulse
-      `@keyframes wc-bounce {
-        0%,100% { transform: translateY(0) rotate(var(--base-rot,0deg)); }
-        40%      { transform: translateY(-7px) rotate(var(--base-rot,0deg)); }
-        60%      { transform: translateY(-4px) rotate(var(--base-rot,0deg)); }
-      }`,
-      // spin: slow full rotation
-      `@keyframes wc-spin {
-        0%   { transform: rotate(var(--base-rot,0deg)); }
-        100% { transform: rotate(calc(var(--base-rot,0deg) + 360deg)); }
-      }`,
-      // pulse: scale in and out
-      `@keyframes wc-pulse {
-        0%,100% { transform: rotate(var(--base-rot,0deg)) scale(1); }
-        50%      { transform: rotate(var(--base-rot,0deg)) scale(1.18); }
-      }`,
-      // jitter: rapid small shakes
-      `@keyframes wc-jitter {
-        0%,100% { transform: rotate(var(--base-rot,0deg)) translate(0,0); }
-        20%      { transform: rotate(calc(var(--base-rot,0deg)+3deg)) translate(-2px,1px); }
-        40%      { transform: rotate(calc(var(--base-rot,0deg)-2deg)) translate(2px,-1px); }
-        60%      { transform: rotate(calc(var(--base-rot,0deg)+1deg)) translate(-1px,2px); }
-        80%      { transform: rotate(calc(var(--base-rot,0deg)-3deg)) translate(1px,-2px); }
-      }`,
-      // float: slow drift up and down
-      `@keyframes wc-float {
-        0%,100% { transform: rotate(var(--base-rot,0deg)) translateY(0); }
-        50%      { transform: rotate(var(--base-rot,0deg)) translateY(-10px); }
-      }`,
-    ];
-    style.textContent = FUN_ANIMATIONS.join(" ");
-    defs.appendChild(style);
-  }
-
   svg.appendChild(defs);
 
-  const FUN_ANIM_NAMES = ["wc-wobble","wc-bounce","wc-spin","wc-pulse","wc-jitter","wc-float"];
-  const FUN_ANIM_DURATIONS = [2.8, 1.6, 8, 3.2, 0.5, 4.5];
+  for (const [i, w] of placed.entries()) {
+    const fontStr   = w.fontTemplate.replace("{S}", w.size);
+    const transform = w.rotate ? `translate(${w.x},${w.y}) rotate(${w.rotate}) translate(${-w.x},${-w.y})` : "";
 
-  for (const w of placed) {
-    const fontStr  = w.fontTemplate.replace("{S}", w.size);
-    const transform = w.rotate ? `rotate(${w.rotate})` : "";
-
-    // Faint trail behind echo / deep words
+    // Faint trail (default mode echo/deep)
     if (w.trail) {
       const trail = document.createElementNS(NS, "text");
-      const dy = w.category === "echo" ? 3 : 5;
       const dx = w.category === "echo" ? 4 : 0;
+      const dy = w.category === "echo" ? 3 : 5;
       trail.setAttribute("x", w.x + dx);
       trail.setAttribute("y", w.y + dy);
       trail.setAttribute("text-anchor", "middle");
       trail.setAttribute("dominant-baseline", "middle");
-      if (transform) trail.setAttribute("transform", `translate(${w.x + dx},${w.y + dy}) ${transform} translate(${-(w.x + dx)},${-(w.y + dy)})`);
       trail.style.cssText = `font:${fontStr};fill:${w.shadowColor};opacity:0.18;pointer-events:none;`;
       trail.textContent = w.text;
       svg.appendChild(trail);
@@ -590,22 +721,22 @@ function renderSvg(placed, stageWidth, stageHeight) {
     el.setAttribute("y", w.y);
     el.setAttribute("text-anchor", "middle");
     el.setAttribute("dominant-baseline", "middle");
-    if (transform) el.setAttribute("transform", `translate(${w.x},${w.y}) ${transform} translate(${-w.x},${-w.y})`);
+    el.setAttribute("data-fun-idx", i);   // used by fun loop to find elements
+    if (transform) el.setAttribute("transform", transform);
 
-    let css = `font:${fontStr};fill:${w.color};letter-spacing:${w.letterSpacing};`;
-    if (w.opacity !== undefined && w.opacity < 1) css += `opacity:${w.opacity};`;
+    let css = `font:${fontStr};fill:${w.color};letter-spacing:${w.letterSpacing};opacity:0;transition:opacity 0.5s ease;`;
+    if (w.opacity !== undefined && w.opacity < 1) css += `--target-opacity:${w.opacity};`;
     if (w.stroke !== "none") css += `stroke:${w.stroke};stroke-width:${w.strokeWidth}px;paint-order:stroke fill;`;
     if (w.glow) css += "filter:url(#softGlow);";
-    if (cloudMode === "fun") {
-      const animIdx  = w.animIndex % FUN_ANIM_NAMES.length;
-      const name     = FUN_ANIM_NAMES[animIdx];
-      const dur      = FUN_ANIM_DURATIONS[animIdx];
-      const delay    = (w.animIndex * 0.37) % 3;  // stagger so they don't all move together
-      css += `--base-rot:${w.rotate}deg;animation:${name} ${dur}s ${delay}s ease-in-out infinite;transform-box:fill-box;transform-origin:center;`;
-    }
     el.style.cssText = css;
     el.setAttribute("class", `word word--${w.category}`);
     el.textContent = w.text;
+
+    // Tooltip events (all modes)
+    el.addEventListener("mouseenter", evt => showTooltip(evt, w));
+    el.addEventListener("mousemove",  evt => moveTooltip(evt));
+    el.addEventListener("mouseleave", hideTooltip);
+
     svg.appendChild(el);
   }
 
@@ -614,15 +745,20 @@ function renderSvg(placed, stageWidth, stageHeight) {
 
 // ── Draw ───────────────────────────────────────────────────────────────────────
 
-async function drawCloud() {
+let _isFirstDraw = true;  // track whether to confetti on first reveal
+
+async function drawCloud(isReveal = false) {
   if (!currentWordCounts.length) {
     els.cloudMessage.textContent = "No responses yet for this experience.";
     els.cloudStage.innerHTML = "";
+    stopFunLoop();
     currentPlacedWords = [];
     return;
   }
 
   els.cloudMessage.textContent = "";
+  stopFunLoop();
+
   const stageWidth  = els.cloudStage.clientWidth  || 960;
   const stageHeight = els.cloudStage.clientHeight || 490;
 
@@ -632,9 +768,30 @@ async function drawCloud() {
 
   const svg = renderSvg(placed, stageWidth, stageHeight);
 
+  // Swap SVG atomically
   const existing = els.cloudStage.querySelector("svg");
   if (existing) existing.remove();
   els.cloudStage.appendChild(svg);
+
+  // Fade words in after a single rAF so the opacity transition fires
+  requestAnimationFrame(() => {
+    svg.querySelectorAll("text.word").forEach(el => {
+      const target = el.style.getPropertyValue("--target-opacity") || "1";
+      el.style.opacity = target;
+    });
+  });
+
+  // Confetti on reveal or when a new word is submitted (fun mode only)
+  if (cloudMode === "fun" && (isReveal || !_isFirstDraw)) {
+    burstConfetti();
+  }
+  _isFirstDraw = false;
+
+  // Start drift/colour/pulse loop for fun mode
+  if (cloudMode === "fun") {
+    // Small delay so elements are painted before the loop starts reading positions
+    setTimeout(() => startFunLoop(placed, svg, stageWidth, stageHeight), 60);
+  }
 }
 
 async function downloadCloudAsJpeg() {
@@ -717,7 +874,8 @@ async function unlockAndRevealCloud() {
 
   els.cloudWrap.classList.remove("is-hidden");
   await loadWords();
-  await drawCloud();
+  _isFirstDraw = true;
+  await drawCloud(true);
 }
 
 async function refreshAll(renderCloud = false) {
@@ -753,7 +911,9 @@ async function submitWord(event) {
 
   els.wordInput.value = "";
   els.submitMessage.textContent = "Saved.";
-  await refreshAll(!els.cloudWrap.classList.contains("is-hidden"));
+  const _cloudVisible = !els.cloudWrap.classList.contains("is-hidden");
+  if (_cloudVisible && cloudMode === "fun") burstConfetti();
+  await refreshAll(_cloudVisible);
 }
 
 async function startNewExperience(event) {
