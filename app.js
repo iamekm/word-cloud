@@ -243,19 +243,19 @@ async function loadWords() {
 
 // ─── Word cloud rendering ────────────────────────────────────────────────────
 // Three modes:
-//   "acoustic" — muted tonal palette, opacity-as-distance, gentle tilts,
+//   "default" — muted tonal palette, opacity-as-distance, gentle tilts,
 //                disciplined fonts, echo trails on dominant words only
 //   "mono"     — clean black & white, single font, no rotation
 //   "fun"      — wild colours, mixed fonts, steep tilts, big size swings
 
-let cloudMode = "acoustic"; // persists across redraws
+let cloudMode = "default"; // persists across redraws
 
 // ── Palettes ──────────────────────────────────────────────────────────────────
 
 const PALETTES = {
   // Acoustic: muted, tonal — dusty blues, warm ambers, soft purples, slate.
   // Colours you'd associate with acoustic spaces: wood, concrete, cloth, air.
-  acoustic: {
+  default: {
     echo:    ["#7b8cde", "#9d8ec4", "#6e9fc2", "#a98fc4"],  // airy purples/blues
     harsh:   ["#8c5a4a", "#7a6651", "#5c5470", "#6b4c3b"],  // dry browns/muted reds
     deep:    ["#3a4a5c", "#445566", "#384454", "#2e3d50"],   // dark slates
@@ -263,9 +263,10 @@ const PALETTES = {
     neutral: ["#6b7a8d", "#7d6e7a", "#5e7a72", "#8a7560", "#6e7e8a"],
   },
   fun: [
-    "#e63946","#f4a261","#2a9d8f","#e9c46a","#264653",
-    "#7209b7","#3a86ff","#fb5607","#06d6a0","#ef233c",
-    "#118ab2","#ffd166","#9b2226","#52b788","#c77dff",
+    "#ff006e","#fb5607","#ffbe0b","#8338ec","#3a86ff",
+    "#06d6a0","#ef233c","#f72585","#4cc9f0","#7209b7",
+    "#ffd60a","#e63946","#00f5d4","#ff4d6d","#4361ee",
+    "#aaff00","#ff0054","#00b4d8","#ff6b35","#b5179e",
   ],
 };
 
@@ -283,18 +284,20 @@ function classifyWord(text) {
 // ── Font selection ─────────────────────────────────────────────────────────────
 
 const FUN_FONTS = [
+  "900 {S}px Impact,Haettenschweiler,sans-serif",
   "800 {S}px 'Arial Black',Arial,sans-serif",
   "700 italic {S}px Georgia,serif",
-  "700 {S}px Impact,sans-serif",
-  "600 {S}px 'Trebuchet MS',sans-serif",
+  "900 italic {S}px Impact,sans-serif",
   "700 {S}px 'Courier New',monospace",
-  "900 {S}px Arial,sans-serif",
+  "800 italic {S}px 'Arial Black',Arial,sans-serif",
+  "700 {S}px 'Trebuchet MS',sans-serif",
+  "900 {S}px 'Arial Black',Arial,sans-serif",
 ];
 
 function fontForWord(mode, category, isPhrase, index) {
   if (mode === "mono") return "600 {S}px Arial,Helvetica,sans-serif";
   if (mode === "fun")  return FUN_FONTS[index % FUN_FONTS.length];
-  // acoustic: considered, calm typography
+  // default: considered, calm typography
   // — lyrical/resonant words get a light-weight serif (feels like reverb tail)
   // — percussive/harsh words get compressed monospace (feels clipped, dry)
   // — everything else gets a clean light sans
@@ -309,17 +312,17 @@ function rotationForWord(mode, category, isPhrase, index) {
   if (isPhrase) return 0;
   if (mode === "mono") return 0;
   if (mode === "fun") {
-    const angles = [0, 0, 90, -90, 45, -45, 0, 90, -45, 0, 45, -90];
+    // Every word gets a strong chance of tilting — upright is the exception
+    const angles = [90, -90, 45, -45, 90, 135, -135, 45, -90, 90, -45, 180, 45, -90, 90, -45];
     return angles[index % angles.length];
   }
-  // acoustic: gentle off-axis tilts only — like sound waves slightly askew.
-  // Only about 1-in-4 words tilt; tilts are small (±15° or ±30°), never 90°.
-  // Harsh/percussive words tilt more — clipped, angular feel.
+  // default: only upright or 90° — clean, purposeful.
+  // Roughly 1-in-5 single words rotates; harsh words rotate slightly more often.
   if (category === "harsh") {
-    const harshAngles = [0, -15, 0, 30, -30, 0, 15, 0];
+    const harshAngles = [0, 90, 0, 0, -90, 0, 90, 0];
     return harshAngles[index % harshAngles.length];
   }
-  const angles = [0, 0, 0, -15, 0, 0, 15, 0, 0, -30, 0, 0, 30, 0, 0, 0];
+  const angles = [0, 0, 0, 0, 90, 0, 0, 0, 0, -90, 0, 0, 0, 0, 0, 90];
   return angles[index % angles.length];
 }
 
@@ -410,12 +413,12 @@ function buildWordData(stageWidth, stageHeight) {
   // shout. A sinusoidal ripple is added so words at similar counts vary
   // slightly, like amplitude variation in a real signal.
   const maxPx = Math.min(
-    cloudMode === "fun" ? 80 : cloudMode === "acoustic" ? 62 : 72,
-    Math.floor(stageWidth * (cloudMode === "fun" ? 0.30 : cloudMode === "acoustic" ? 0.22 : 0.26))
+    cloudMode === "fun" ? 96 : cloudMode === "default" ? 62 : 72,
+    Math.floor(stageWidth * (cloudMode === "fun" ? 0.36 : cloudMode === "default" ? 0.22 : 0.26))
   );
   const minPx = Math.max(
-    cloudMode === "fun" ? 13 : cloudMode === "acoustic" ? 15 : 14,
-    Math.floor(maxPx * (cloudMode === "fun" ? 0.18 : cloudMode === "acoustic" ? 0.30 : 0.22))
+    cloudMode === "fun" ? 10 : cloudMode === "default" ? 15 : 14,
+    Math.floor(maxPx * (cloudMode === "fun" ? 0.11 : cloudMode === "default" ? 0.30 : 0.22))
   );
 
   return currentWordCounts.map(([text, value], i) => {
@@ -427,7 +430,7 @@ function buildWordData(stageWidth, stageHeight) {
 
     // Acoustic: add a subtle sine ripple so identically-frequent words still
     // differ slightly in size — mimics natural amplitude variation
-    const ripple   = cloudMode === "acoustic" ? Math.sin(i * 1.7) * 2 : 0;
+    const ripple   = cloudMode === "default" ? Math.sin(i * 1.7) * 2 : 0;
     const baseSize = Math.round(minPx + Math.sqrt(t) * (maxPx - minPx) + ripple);
     const emphasis = /really|very|extremely|super/i.test(text) ? 1.08 : 1.0;
 
@@ -439,21 +442,21 @@ function buildWordData(stageWidth, stageHeight) {
     } else if (cloudMode === "fun") {
       color = PALETTES.fun[i % PALETTES.fun.length];
     } else {
-      const palette = PALETTES.acoustic[category];
+      const palette = PALETTES.default[category];
       color = palette[i % palette.length];
     }
 
     // Acoustic: opacity as distance — frequent words feel close and present,
     // rare words feel distant, like sound decaying across a room.
     // Fun/mono: always fully opaque.
-    const opacity = cloudMode === "acoustic"
+    const opacity = cloudMode === "default"
       ? Math.round((0.45 + t * 0.55) * 100) / 100   // 0.45 → 1.0
       : 1;
 
     // Letter-spacing as texture (acoustic only)
-    const letterSpacing = cloudMode === "acoustic" && category === "echo"  ? "0.06em"
-                        : cloudMode === "acoustic" && category === "harsh" ? "-0.02em"
-                        : cloudMode === "acoustic" && category === "deep"  ? "0.02em"
+    const letterSpacing = cloudMode === "default" && category === "echo"  ? "0.06em"
+                        : cloudMode === "default" && category === "harsh" ? "-0.02em"
+                        : cloudMode === "default" && category === "deep"  ? "0.02em"
                         : "0";
 
     // Echo trails only on the top-half words by frequency (dominant frequencies)
@@ -461,8 +464,8 @@ function buildWordData(stageWidth, stageHeight) {
     const shadowColor  = category === "echo" ? "rgba(100,110,200,.20)"
                        : category === "deep" ? "rgba(20,32,48,.18)"
                        : "rgba(80,100,130,.12)";
-    const glow  = cloudMode === "acoustic" && category === "echo" && isProminent;
-    const trail = cloudMode === "acoustic" && (category === "echo" || category === "deep") && isProminent;
+    const glow  = cloudMode === "default" && category === "echo" && isProminent;
+    const trail = cloudMode === "default" && (category === "echo" || category === "deep") && isProminent;
 
     return {
       text, value, category, fontTemplate,
